@@ -5,10 +5,17 @@
 
 add_executable(bpmcore_test main.cpp)
 
+# kiss_fft is named here as well as reached through bpmcore, and that is not
+# redundant: it is what puts kiss_fft_scalar in this target's preprocessor, so
+# the batch mode can say which width it was built at without including any of
+# kiss's headers.
 target_link_libraries(bpmcore_test PRIVATE bpmcore kiss_fft)
 
 if(MSVC)
     target_compile_options(bpmcore_test PRIVATE /W4)
+    # std::getenv, which the batch mode uses to find ffmpeg, is standard C++;
+    # MSVC deprecates it in favour of its own _dupenv_s.
+    target_compile_definitions(bpmcore_test PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
 # Checks the exported decision trees still reproduce the classifier they were

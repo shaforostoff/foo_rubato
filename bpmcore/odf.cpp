@@ -115,7 +115,11 @@ namespace
 			for (int f = first; f < end; f++)
 			{
 				const float * src = p.mono + static_cast<std::size_t>(f) * p.hop;
-				for (int i = 0; i < p.nfft; i++) m_frame[i] = src[i] * p.window[i];
+				// The product is formed in double whatever the transform's width:
+				// the window carries the loudness normalisation, and rounding it
+				// to the input's width before multiplying would quantise that.
+				for (int i = 0; i < p.nfft; i++)
+					m_frame[i] = static_cast<kiss_fft_scalar>(src[i] * p.window[i]);
 				kiss_fftr(m_fft.cfg, m_frame.data(), m_spectrum.data());
 
 				// Two tight loops rather than one fused one. Computing the whole

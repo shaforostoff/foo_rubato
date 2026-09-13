@@ -20,6 +20,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -53,8 +54,8 @@ struct fft_case
 
 		for (std::size_t k = 0; k < size; ++k)
 		{
-			cpx_input[k].r = input[k];
-			cpx_input[k].i = 0.0;
+			cpx_input[k].r = static_cast<kiss_fft_scalar>(input[k]);
+			cpx_input[k].i = static_cast<kiss_fft_scalar>(0);
 		}
 
 		kiss_fft(cfg, cpx_input.data(), cpx_output.data());
@@ -102,7 +103,24 @@ std::istream & operator >>(std::istream & is, fft_case & test)
 	return is;
 }
 
-const double threshold = 1e-6;
+//! Absolute error a case is allowed, at the width kiss was built for.
+//!
+//! Two floors, and the larger wins. The stored expectations carry nine
+//! decimals, so a little absolute slack is needed at any width: 1e-6 is what
+//! this test has always used, and the double build measures three orders
+//! inside it. Float cannot meet that floor and should not be asked to - the
+//! bins here reach a magnitude of 32, where a single float epsilon is already
+//! 4e-6 - so above it sits a term relative to the largest bin, which is what
+//! an FFT's error is actually proportional to. Eight epsilons of headroom
+//! leaves the measured float error a factor of thirty clear while staying far
+//! below anything a broken transform could produce.
+double tolerance(const fft_case & test)
+{
+	double peak = 0.0;
+	for (std::size_t k = 0; k < test.size; ++k)
+		peak = std::max(peak, std::abs(test.expected_output[k]));
+	return std::max(1e-6, peak * 8 * std::numeric_limits<kiss_fft_scalar>::epsilon());
+}
 
 bool run_case(const std::string & path)
 {
@@ -114,6 +132,7 @@ bool run_case(const std::string & path)
 
 	test.transform();
 
+	const double threshold = tolerance(test);
 	const double d = test.distance();
 	const bool ok = d < threshold;
 

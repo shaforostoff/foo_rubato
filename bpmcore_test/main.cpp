@@ -19,6 +19,12 @@
 //       run the whole chain and print the result, for comparison against the
 //       Python reference implementation the model was developed with.
 //
+//   batch <list of audio files> [threads]
+//       decode and analyse every track in a list file, one TSV row each, so
+//       two builds of the analysis can be compared over a whole collection.
+//       This is the only mode that needs ffmpeg, and the only one that reads
+//       anything but raw PCM.
+//
 //   bench <raw f32 mono file> <sample rate> [repeats]
 //       time the analysis.
 //
@@ -38,10 +44,23 @@
 #include <cstdio>
 #include <cctype>
 #include <cstdlib>
+#include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <vector>
+
+// The width bpmcore's transform was built at. kiss_fft defines this PUBLIC, so
+// it arrives without any of its headers being included - the name expands to
+// `double` or `float`, both of which are types this can name and size.
+#if defined(kiss_fft_scalar)
+#define BPMCORE_TEST_STR2(x) #x
+#define BPMCORE_TEST_STR(x)  BPMCORE_TEST_STR2(x)
+#define BPMCORE_TEST_SCALAR  BPMCORE_TEST_STR(kiss_fft_scalar)
+#else
+#define BPMCORE_TEST_SCALAR  "unknown"
+#endif
 
 namespace
 {
@@ -84,6 +103,175 @@ namespace
 		std::printf("%.6f %s %.6f %.6f %d %.3f %.4f %d %.6f\n", a.bpm, bpmcore::rhythm_name(a.rhythm),
 		            a.confidence, a.beat_bpm, a.meter, a.duration,
 		            a.bpm_spread, a.spread_windows, a.initial_bpm);
+		return 0;
+	}
+
+	//! ffmpeg, found the way scripts/analysis/config.py finds it.
+	std::string ffmpeg_path()
+	{
+		const char * e = std::getenv("TANGO_FFMPEG");
+		return e != nullptr && *e != '\0' ? std::string(e) : std::string("ffmpeg");
+	}
+
+	//! Decodes one file to mono float at the model rate, through ffmpeg.
+	//!
+	//! The same invocation `scripts/analysis/odf.py` uses, so a track measured
+	//! here and the same track measured by the reference pipeline start from
+	//! identical samples. Decoding straight to the model rate also keeps the
+	//! resampler out of the comparison: `analyse` passes audio already at that
+	//! rate through untouched, so what two builds differ by is the spectral
+	//! stage alone rather than the spectral stage plus a resampling.
+	//!
+	//! To a pipe rather than a cache on disk because a decoded collection is
+	//! about 190GB, and the decode is an hour that gets paid twice rather than
+	//! twenty times.
+	bool decode_track(const std::string & path, const std::string & ffmpeg,
+	                  std::vector<float> & out, std::string & error)
+	{
+		out.clear();
+		if (path.find('"') != std::string::npos)
+		{
+			error = "path contains a quote";
+			return false;
+		}
+
+		// Bounded here because the free `analyse` does not bound itself - only the
+		// collector the component uses does. A mis-tagged hour-long file would
+		// otherwise decide how much memory the sweep takes.
+		const std::size_t max_samples = static_cast<std::size_t>(
+			bpmcore::max_seconds() * bpmcore::odf_model_rate);
+
+		const std::string tail = " -ac 1 -ar " + std::to_string(bpmcore::odf_model_rate)
+		                       + " -f f32le -";
+#if defined(_WIN32)
+		// u8path is what turns a UTF-8 path from the list file into the UTF-16 the
+		// wide CRT wants; the collections have accented names, and the narrow
+		// _popen would hand those to cmd.exe in the ANSI code page.
+		const std::wstring wexe  = std::filesystem::u8path(ffmpeg).wstring();
+		const std::wstring wpath = std::filesystem::u8path(path).wstring();
+		const std::wstring wtail(tail.begin(), tail.end());   // ASCII by construction
+		// The outer pair of quotes is cmd.exe's: it strips the first and last quote
+		// of a command that begins with one, which is how a quoted executable and a
+		// quoted argument survive in the same command line.
+		const std::wstring cmd = L"\"\"" + wexe + L"\" -v error -i \"" + wpath
+		                       + L"\"" + wtail + L"\"";
+		std::FILE * pipe = _wpopen(cmd.c_str(), L"rb");
+#else
+		const std::string cmd = "\"" + ffmpeg + "\" -v error -i \"" + path + "\"" + tail;
+		std::FILE * pipe = popen(cmd.c_str(), "r");
+#endif
+		if (pipe == nullptr) { error = "cannot start ffmpeg"; return false; }
+
+		std::vector<char> bytes;
+		char buf[1 << 16];
+		std::size_t n;
+		// Past the cap the pipe is drained rather than abandoned: closing it early
+		// would leave ffmpeg writing into a broken pipe, and the exit status is
+		// wanted.
+		while ((n = std::fread(buf, 1, sizeof buf, pipe)) > 0)
+			if (bytes.size() < max_samples * sizeof(float))
+				bytes.insert(bytes.end(), buf, buf + n);
+
+#if defined(_WIN32)
+		const int rc = _pclose(pipe);
+#else
+		const int rc = pclose(pipe);
+#endif
+		if (rc != 0) { error = "ffmpeg exited " + std::to_string(rc); return false; }
+
+		const std::size_t count = std::min(bytes.size() / sizeof(float), max_samples);
+		if (count < bpmcore::odf_model_rate) { error = "short or empty decode"; return false; }
+		out.resize(count);
+		std::memcpy(out.data(), bytes.data(), count * sizeof(float));
+		// One NaN poisons the RMS and with it the whole envelope. The reference
+		// pipeline calls nan_to_num on the same samples for the same reason.
+		for (float & v : out) if (!std::isfinite(v)) v = 0.0f;
+		return true;
+	}
+
+	//! Every track in a list file, one row each.
+	//!
+	//! For comparing two builds of the analysis over a whole collection: run it
+	//! under each and diff the output. The rows carry the discrete decisions as
+	//! well as the tempo, because a change that leaves accuracy against the
+	//! ground truth alone can still move individual tracks underneath it - and of
+	//! those the metrical level is the one that costs a factor of two when it
+	//! flips.
+	//!
+	//! A track that will not decode still gets a row, so that two runs stay line
+	//! for line and a diff shows only what the analysis did.
+	int run_batch(const char * list_path, int threads)
+	{
+		std::ifstream in(list_path, std::ios::binary);
+		if (!in)
+		{
+			std::fprintf(stderr, "cannot open %s\n", list_path);
+			return 2;
+		}
+
+		std::vector<std::string> paths;
+		std::string line;
+		while (std::getline(in, line))
+		{
+			if (!line.empty() && line.back() == '\r') line.pop_back();
+			// A UTF-8 BOM would otherwise become part of the first path.
+			if (paths.empty() && line.compare(0, 3, "\xEF\xBB\xBF") == 0) line.erase(0, 3);
+			if (line.empty() || line[0] == '#') continue;
+			paths.push_back(line);
+		}
+		if (paths.empty())
+		{
+			std::fprintf(stderr, "%s lists no files\n", list_path);
+			return 2;
+		}
+
+		const std::string ffmpeg = ffmpeg_path();
+		std::fprintf(stderr, "%d tracks, %s precision, ffmpeg %s\n",
+		             static_cast<int>(paths.size()), BPMCORE_TEST_SCALAR, ffmpeg.c_str());
+
+		// Column names only - nothing that identifies the build, so that two runs
+		// differ on the rows and not on the header.
+		std::printf("#path\tok\tbpm\trhythm\tconfidence\tbeat_bpm\tmeter"
+		            "\tinitial_bpm\tbpm_spread\tspread_windows\tduration\n");
+
+		bpmcore::options opt;
+		opt.threads = threads;
+		int failed = 0;
+		std::vector<float> mono;
+		for (std::size_t i = 0; i < paths.size(); i++)
+		{
+			std::string error;
+			bpmcore::analysis a;
+			if (!decode_track(paths[i], ffmpeg, mono, error))
+			{
+				std::fprintf(stderr, "%s: %s\n", paths[i].c_str(), error.c_str());
+				failed++;
+			}
+			else
+			{
+				a = bpmcore::analyse(mono.data(), mono.size(),
+				                     bpmcore::odf_model_rate, nullptr, &opt);
+				if (!a.ok)
+				{
+					std::fprintf(stderr, "%s: analysis declined the track\n", paths[i].c_str());
+					failed++;
+				}
+			}
+
+			std::printf("%s\t%d\t%.6f\t%s\t%.6f\t%.6f\t%d\t%.6f\t%.4f\t%d\t%.3f\n",
+			            paths[i].c_str(), a.ok ? 1 : 0, a.bpm,
+			            a.ok ? bpmcore::rhythm_name(a.rhythm) : "-",
+			            a.confidence, a.beat_bpm, a.meter, a.initial_bpm,
+			            a.bpm_spread, a.spread_windows, a.duration);
+			// Flushed per row so an interrupted sweep still has usable output, and
+			// so progress on stderr stays in step with it.
+			std::fflush(stdout);
+			if ((i + 1) % 25 == 0 || i + 1 == paths.size())
+				std::fprintf(stderr, "\r%d/%d", static_cast<int>(i + 1),
+				             static_cast<int>(paths.size()));
+		}
+		std::fprintf(stderr, "\n%d of %d tracks produced no analysis\n",
+		             failed, static_cast<int>(paths.size()));
 		return 0;
 	}
 
@@ -673,6 +861,8 @@ int main(int argc, char ** argv)
 		return run_profile(argv[2], static_cast<unsigned>(std::atoi(argv[3])),
 		                   argc >= 5 ? std::max(1, std::atoi(argv[4])) : 3,
 		                   argc >= 6 ? std::atoi(argv[5]) : 1);
+	if (mode == "batch" && argc >= 3)
+		return run_batch(argv[2], argc >= 4 ? std::atoi(argv[3]) : 0);
 	if (mode == "bench" && argc >= 4)
 		return run_bench(argv[2], static_cast<unsigned>(std::atoi(argv[3])),
 		                 argc >= 5 ? std::max(1, std::atoi(argv[4])) : 3,
@@ -683,6 +873,7 @@ int main(int argc, char ** argv)
 		"       bpmcore_test resample\n"
 		"       bpmcore_test tempo_spread\n"
 		"       bpmcore_test pipeline <raw f32 mono file> <sample rate>\n"
+		"       bpmcore_test batch <list of audio files> [threads]\n"
 		"       bpmcore_test bench <raw f32 mono file> <sample rate> [repeats]\n"
 		"       bpmcore_test trajectory <raw f32 mono file> <sample rate>\n");
 	return 64;
