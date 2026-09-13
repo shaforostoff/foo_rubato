@@ -465,6 +465,63 @@ decoder on one core. Running several tracks at once is the obvious next step and
 the only one that would help a slow codec.
 
 
+### What the spectral stage costs at float
+
+The transform is 65% of the envelope loop and the envelope is about 90% of the
+analysis, so an embedded build wants a SIMD FFT — and every one worth having is
+single precision. That is a question about the analyser's arithmetic rather
+than about which library computes it, so it was settled first and separately.
+
+KISS is scalar C at either width and measures 0.1053s against 0.1067s over a
+three-minute track, so the width buys no speed by itself. What it buys is the
+ability to ask the question before any of the porting work exists: build
+`BPMCORE_FFT_SCALAR=double` and `=float`, run `bpmcore_test batch` over the
+collections under each, and diff with `scripts/analysis/compare_batch.py`.
+
+Over **12,157 tracks analysed by both**, nothing moved:
+
+| | |
+|---|---|
+| metrical level flipped | 0 |
+| meter changed | 0 |
+| rhythm class changed | 0 |
+| BPM \|delta\|, median / p99 / max | 0.000000 / 0.000013 / 0.056 |
+| confidence \|delta\|, median / p99 / max | 0.000000 / 0.000000 / 0.198 |
+
+Against the 3,692 hand taps both widths read 37.84% exact, 90.03% within 2 BPM
+and 97.75% right level — the same figures to two decimals, with not one tapped
+track landing closer to its tap or further from it. Set against the refit noise
+floor above, which would predict 287 tracks moving on a collection this size,
+float moved none.
+
+The counts being zero hides the near misses, and those are worth naming because
+they show the mechanism that would eventually bite. Every one of the largest
+disagreements is a Canaro acoustic side from the 1920s — the flattest, noisiest
+transfers here, where the classifier and the autocorrelation peak both have the
+least contrast to work from. The extreme case is *Gabriela* (1927, vals), whose
+probability fell from 0.9900 to 0.7915 while the answer stayed vals at 57.916
+against a beat of 171.21. A change that large from a perturbation of 1e-5 is a
+feature crossing a split in the trees, which moves a leaf and so the probability
+discretely rather than smoothly. That is exactly the failure mode float was
+suspected of, and on this collection it fires once in twelve thousand sides and
+does not reach the decision.
+
+Two caveats on what this measured. The sweep decodes to the model rate, so the
+transform is 1024 points; a 44.1kHz path takes 2048 and accumulates over one
+more radix-2 stage. And it measured float **KISS**, which is the same algorithm
+at a narrower width — a different library reorders and uses different
+butterflies, so it needs its own check with KISS as the oracle. That is the
+reason to keep KISS after a faster transform arrives, rather than as a fallback
+nobody would ship.
+
+Some of the risk was retired before the sweep ran: the reference pipeline the
+model was fitted with already stores its spectrum as float32 (`stft_mag` in
+`scripts/analysis/odf.py`), so the trees were trained on float32 magnitudes.
+Not the same thing as a float transform — numpy computes in double and rounds
+the result, where a float FFT accumulates over all its stages — but it means
+the width the features arrive at was never the double one.
+
+
 Reproducing the model
 ---------------------
 
