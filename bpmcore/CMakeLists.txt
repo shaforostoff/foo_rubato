@@ -27,11 +27,16 @@ target_include_directories(bpmcore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/..")
 # a test that links bpmcore and reads its bins has to agree about the layout.
 include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/fft_backend.cmake")
 
+# Both backends are named, rather than kiss being the absence of pffft. A
+# consumer that has to say which transform is in the build - foo_rubato's about
+# box credits its licence - can then tell "kiss" from "these definitions never
+# arrived", and fail the compile instead of printing a guess.
 if(BPMCORE_FFT_BACKEND STREQUAL "pffft")
     target_link_libraries(bpmcore PRIVATE pffft)
     target_compile_definitions(bpmcore PUBLIC BPMCORE_FFT_PFFFT)
 else()
     target_link_libraries(bpmcore PRIVATE kiss_fft)
+    target_compile_definitions(bpmcore PUBLIC BPMCORE_FFT_KISS)
 endif()
 target_compile_definitions(bpmcore PUBLIC BPMCORE_FFT_SCALAR_TYPE=${BPMCORE_FFT_SCALAR})
 

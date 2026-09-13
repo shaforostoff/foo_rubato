@@ -46,6 +46,7 @@ add_library(foo_rubato MODULE
     bpm_manual_dialog.h
     bpm_preferences_page.h
     bpm_result_dialog.h
+    fft_license.h
     file_info_filter_bpm.h
     file_info_filter_scale_bpm.h
     format_bpm.h
@@ -65,6 +66,8 @@ set_target_properties(foo_rubato PROPERTIES
 
 # kiss_fft is bpmcore's business now, and reaches the link through it: nothing
 # here has included a kiss_fft header since the legacy engine's wrapper went.
+# What does still cross is which backend was chosen, as a PUBLIC definition, and
+# fft_license.h turns that into the one licence the about box prints.
 target_link_libraries(foo_rubato PRIVATE fb2k::sdk bpmcore)
 
 # ... which is where the generated version.h lands.
