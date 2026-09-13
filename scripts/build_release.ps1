@@ -33,6 +33,13 @@
     ships. Gets its own build directory and its own archive name, so the two
     can never be mistaken for one another. See cmake\fft_backend.cmake.
 
+.PARAMETER Dynamic
+    Link the C runtime as a DLL rather than statically: 209KB off each DLL and
+    111KB off each packed, and NOT what the component ships. The build
+    then needs the Visual C++ redistributable present, and foobar2000 refuses
+    to load a component whose runtime is missing without saying much about
+    why. Own build directory and own archive name, as -Pffft.
+
 .PARAMETER SkipTests
     Do not run the verification harness. Not recommended.
 
@@ -47,6 +54,9 @@
 
 .EXAMPLE
     .\scripts\build_release.ps1 -Pffft
+
+.EXAMPLE
+    .\scripts\build_release.ps1 -Dynamic -Arch x64
 #>
 
 [CmdletBinding()]
@@ -55,6 +65,7 @@ param(
     [string[]] $Arch = @('x86', 'x64'),
     [string]   $Configuration = 'Release',
     [switch]   $Pffft,
+    [switch]   $Dynamic,
     [switch]   $SkipTests,
     [switch]   $Clean
 )
@@ -84,24 +95,35 @@ if ($cmakeLists -notmatch '(?m)^\s*VERSION\s+([0-9]+(?:\.[0-9]+)*)') {
 $version = $Matches[1]
 Write-Host "foo_rubato $version" -ForegroundColor Cyan
 
-# --- which transform, and so which build tree and which archive -------------
-# PFFFT at float is a different analysis binary from KISS at double, and is
-# given its own of both. Sharing either would be a trap rather than a
-# convenience: CMake caches BPMCORE_FFT_BACKEND, so a plain build run after a
-# -Pffft one into the same directory would keep the cached pffft and package it
-# as the shipping component without saying so.
+# --- what is being built, and so which build tree and which archive ---------
+# Anything that changes the binary gets its own directory and its own archive
+# name, and the suffixes compose. Sharing either would be a trap rather than a
+# convenience: every one of these is a CMake cache variable, so a plain build
+# run after a switched one into the same directory would keep what was cached
+# and package it as the shipping component without saying so.
 #
-# One switch rather than the two options cmake\fft_backend.cmake takes, because
-# only two configurations are worth releasing. KISS at float is a precision
-# probe rather than something to ship, and PFFFT has no double to offer.
-$fftArgs = @()
-$suffix  = ''
+# One switch each, rather than the options underneath them. There is no
+# configuration worth releasing that needs finer control than this: KISS at
+# float is a precision probe rather than something to ship, PFFFT has no double
+# to offer, and cmake\fft_backend.cmake and the FOO_RUBATO_* options are still
+# there for a build that wants to say something else.
+$cmakeArgs = @()
+$suffix    = ''
+
 if ($Pffft) {
-    $fftArgs = @('-DBPMCORE_FFT_BACKEND=pffft', '-DBPMCORE_FFT_SCALAR=float')
-    $suffix  = '-pffft'
+    $cmakeArgs += '-DBPMCORE_FFT_BACKEND=pffft', '-DBPMCORE_FFT_SCALAR=float'
+    $suffix    += '-pffft'
     Write-Host '  spectral stage: PFFFT, float - not the shipping configuration' -ForegroundColor Yellow
 } else {
     Write-Host '  spectral stage: KISS FFT, double' -ForegroundColor DarkGray
+}
+
+if ($Dynamic) {
+    $cmakeArgs += '-DFOO_RUBATO_STATIC_CRT=OFF'
+    $suffix    += '-dynamic'
+    Write-Host '  C runtime: DLL - needs the VC redist on the target machine' -ForegroundColor Yellow
+} else {
+    Write-Host '  C runtime: static' -ForegroundColor DarkGray
 }
 
 foreach ($dir in @($stage, $symbols)) {
@@ -117,7 +139,7 @@ foreach ($a in $Arch) {
 
     Write-Host "`n=== Configuring $a ===" -ForegroundColor Cyan
     Invoke-Checked "cmake configure ($a)" {
-        & cmake -S $root -B $buildDir -A $platform @fftArgs
+        & cmake -S $root -B $buildDir -A $platform @cmakeArgs
     }
 
     Write-Host "`n=== Building $a ===" -ForegroundColor Cyan
@@ -178,9 +200,14 @@ To install: drag the .fb2k-component file onto foobar2000, or use
 File > Preferences > Components > Install...
 "@ -ForegroundColor Yellow
 
+$notes = @()
 if ($Pffft) {
-    Write-Host @"
-This one analyses with PFFFT at single precision. It is not the release build:
-install it to measure or to test, and do not publish it under that name.
-"@ -ForegroundColor Yellow
+    $notes += 'It analyses with PFFFT at single precision rather than KISS at double.'
+}
+if ($Dynamic) {
+    $notes += 'It links the C runtime as a DLL, so foobar2000 will refuse to load it where the Visual C++ redistributable is missing, and will say little about why.'
+}
+if ($notes.Count -gt 0) {
+    Write-Host "`nThis is not the release build. $($notes -join ' ')" -ForegroundColor Yellow
+    Write-Host 'Install it to measure or to test, and do not publish it under that name.' -ForegroundColor Yellow
 }

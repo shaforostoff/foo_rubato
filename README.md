@@ -38,9 +38,16 @@ installs everywhere. Symbols are packaged separately as
 resolved, but do not ship them.
 
 `-Pffft` builds the same component on the faster single-precision transform
-instead - about 1.7x on a whole analysis, and not what is shipped. It uses its
-own build directory and puts `-pffft` in the archive name, so the two cannot be
-mistaken for one another; `cmake\fft_backend.cmake` is what sits underneath it.
+instead - about 1.7x on a whole analysis, and not what is shipped. `-Dynamic`
+links the C runtime as a DLL rather than statically, which is 209KB off each
+built DLL and 111KB off each packed, at the price of needing the Visual C++
+redistributable on the target machine.
+
+Neither is the release build. Each uses its own build directory and puts its own
+word in the archive name, and they compose - `-Pffft -Dynamic` writes
+`foo_rubato-<version>-pffft-dynamic.fb2k-component` - so no switched build can
+be mistaken for the shipping one. `cmake\fft_backend.cmake` and the
+`FOO_RUBATO_*` options are what sit underneath them.
 
 To work on it in Visual Studio, configure once and open the generated solution:
 
