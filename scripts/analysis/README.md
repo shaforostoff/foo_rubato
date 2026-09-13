@@ -65,6 +65,7 @@ What each file is
 | `extract_odf.py` | decodes and caches envelopes, in parallel |
 | `build_features.py` | feature matrix and per-hypothesis BPM |
 | `train_rhythm_model.py` | fits the model and emits the C++ header |
+| `rhythm_model_header.py` | the header's layout, kept apart from the fit so it can be changed without one |
 | `evaluate.py` | grouped cross-validation for rhythm and BPM |
 
 The feature order in `features.py` (`FEATURE_NAMES`) and in

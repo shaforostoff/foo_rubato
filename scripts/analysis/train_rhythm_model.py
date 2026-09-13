@@ -4,12 +4,16 @@
 The tree walk is re-implemented here in plain Python first and checked against
 sklearn's own decision_function, so that what the header encodes is known to be
 the same model before any of it reaches C++.
+
+The header's layout lives in rhythm_model_header.py rather than here, so that
+it can be regenerated and checked without refitting anything.
 """
 import os, sys, collections
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config
 import tango_labels as T, features as F
+import rhythm_model_header as H
 from sklearn.ensemble import HistGradientBoostingClassifier
 
 CLS = T.CLASSES
@@ -63,86 +67,31 @@ def main():
                                  float(nd['num_threshold']), 0.0))
     print(f'trees={len(offsets)} nodes={len(flat)}')
 
-    # Parity check against sklearn itself.
+    layout = H.split_layout(flat, offsets)
+    print(f"splits={len(layout['split_feature'])} leaves={len(layout['leaf_value'])}")
+
+    # Parity check against sklearn itself, through both readings of the trees.
+    # The flat one comes straight out of the fit; the split layout is what the
+    # header stores and what rhythm.cpp walks, so checking only the first would
+    # leave the half that ships unverified.
     idx = np.random.RandomState(0).choice(len(X), 400, replace=False)
     ref = clf.decision_function(X[idx])
     if ref.ndim == 1:
         ref = np.column_stack([-ref, ref])
-    worst = 0.0
+    worst = worst_split = 0.0
     for j, i in enumerate(idx):
         mine = walk(flat, offsets, targets, baseline, X[i], n_cls)
         worst = max(worst, float(np.max(np.abs(np.array(mine) - ref[j]))))
+        split = H.walk(layout, targets, baseline, X[i])
+        # The same doubles compared in the same order, so these agree exactly
+        # rather than closely. Anything else is a bug in the layout.
+        worst_split = max(worst_split, max(abs(a - b) for a, b in zip(split, mine)))
     print(f'max |mine - sklearn decision_function| over 400 tracks = {worst:.3e}')
     assert worst < 1e-6, 'exported trees do not reproduce the model'
+    assert worst_split == 0.0, f'the split layout walks to different scores ({worst_split})'
 
-    def chunk(lines, per):
-        for i in range(0, len(lines), per):
-            yield lines[i:i + per]
-
-    b = []
-    b.append('#ifndef BPMCORE_RHYTHM_MODEL_H')
-    b.append('#define BPMCORE_RHYTHM_MODEL_H')
-    b.append('')
-    b.append('// GENERATED FILE - do not edit by hand.')
-    b.append('// Produced by scripts/train_rhythm_model.py; see docs/tango-analysis.md.')
-    b.append('//')
-    b.append('// Gradient boosted decision trees over the features built by')
-    b.append('// bpmcore::build_features. Class order is '
-             + ', '.join(c.capitalize() for c in CLS) + ',')
-    b.append('// matching bpmcore::rhythm_class.')
-    b.append('//')
-    b.append(f'// Fitted on {X.shape[0]} hand-labelled tracks, {X.shape[1]} features,')
-    b.append(f'// {len(offsets)} trees, {len(flat)} nodes.')
-    b.append('')
-    b.append('namespace bpmcore')
-    b.append('{')
-    b.append('namespace rhythm_model')
-    b.append('{')
-    b.append('\t//! An interior node compares one feature against a threshold and')
-    b.append('\t//! branches; a leaf has feature < 0 and carries the score to add.')
-    b.append('\tstruct node')
-    b.append('\t{')
-    b.append('\t\tshort feature;')
-    b.append('\t\tshort left;')
-    b.append('\t\tshort right;')
-    b.append('\t\t// Both are double so the walk branches exactly where')
-    b.append('\t\t// scikit-learn branched: rounding a threshold to float')
-    b.append('\t\t// can send a feature down the other side of a split.')
-    b.append('\t\tdouble threshold;')
-    b.append('\t\tdouble value;')
-    b.append('\t};')
-    b.append('')
-    b.append(f'\tconst int feature_count = {X.shape[1]};')
-    b.append(f'\tconst int class_count = {n_cls};')
-    b.append(f'\tconst int tree_count = {len(offsets)};')
-    b.append(f'\tconst int node_count = {len(flat)};')
-    b.append('')
-    b.append(f'\tconst double baseline[{n_cls}] = {{ '
-             + ', '.join(f'{v:.10e}' for v in baseline) + ' };')
-    b.append('')
-    b.append(f'\tconst int tree_offset[{len(offsets)}] = {{')
-    for c in chunk([f'{v}' for v in offsets], 16):
-        b.append('\t\t' + ', '.join(c) + ',')
-    b[-1] = b[-1].rstrip(',')
-    b.append('\t};')
-    b.append('')
-    b.append(f'\tconst short tree_target[{len(targets)}] = {{')
-    for c in chunk([f'{v}' for v in targets], 32):
-        b.append('\t\t' + ', '.join(c) + ',')
-    b[-1] = b[-1].rstrip(',')
-    b.append('\t};')
-    b.append('')
-    b.append(f'\tconst node nodes[{len(flat)}] = {{')
-    for f_, l_, r_, t_, v_ in flat:
-        b.append(f'		{{ {f_}, {l_}, {r_}, {t_!r}, {v_!r} }},')
-    b[-1] = b[-1].rstrip(',')
-    b.append('\t};')
-    b.append('}   // namespace rhythm_model')
-    b.append('}   // namespace bpmcore')
-    b.append('')
-    b.append('#endif // BPMCORE_RHYTHM_MODEL_H')
     with open(OUT, 'w', encoding='utf-8') as fh:
-        fh.write('\n'.join(b) + '\n')
+        fh.write(H.emit(layout, targets, baseline, CLS, X.shape[0], X.shape[1]))
     print('wrote', OUT, os.path.getsize(OUT), 'bytes')
 
     # Reference features + expected output, for the C++ parity test.

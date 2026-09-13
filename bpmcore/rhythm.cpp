@@ -197,6 +197,10 @@ int classify(const std::vector<double> & features, double * confidence)
 	              "the exported model has a different number of classes than rhythm_class");
 	static_assert(rhythm_model::feature_count == feature_count,
 	              "the exported model was fitted on a different feature vector");
+	// Child references are shorts. A refit large enough to overrun that would
+	// otherwise read as a slightly wrong answer rather than as a failure.
+	static_assert(rhythm_model::split_count <= 32767 && rhythm_model::leaf_count <= 32767,
+	              "the exported model has outgrown the short its child references use");
 
 	if (confidence) *confidence = 0.0;
 	if (static_cast<int>(features.size()) != feature_count) return rhythm_other;
@@ -214,12 +218,17 @@ int classify(const std::vector<double> & features, double * confidence)
 
 	for (int t = 0; t < rhythm_model::tree_count; t++)
 	{
-		// Child indices are relative to the tree's own slice of the node array.
-		const rhythm_model::node * nodes = rhythm_model::nodes + rhythm_model::tree_offset[t];
-		int i = 0;
-		while (nodes[i].feature >= 0)
-			i = (x[nodes[i].feature] <= nodes[i].threshold) ? nodes[i].left : nodes[i].right;
-		score[rhythm_model::tree_target[t]] += nodes[i].value;
+		// Splits and leaves are held in separate arrays, because a split never
+		// reads a value and a leaf never reads a threshold. A child reference
+		// is a split index when it is >= 0 and the leaf -1 - c when it is
+		// negative; tree_root carries the same encoding, so a tree that is a
+		// bare leaf takes no steps here rather than a special case.
+		int n = rhythm_model::tree_root[t];
+		while (n >= 0)
+			n = (x[rhythm_model::split_feature[n]] <= rhythm_model::split_threshold[n])
+			    ? rhythm_model::split_left[n]
+			    : rhythm_model::split_right[n];
+		score[rhythm_model::tree_target[t]] += rhythm_model::leaf_value[-1 - n];
 	}
 
 	int best = 0;
