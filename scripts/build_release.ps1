@@ -27,6 +27,12 @@
 .PARAMETER Configuration
     CMake configuration. Default: Release.
 
+.PARAMETER Pffft
+    Build the spectral stage on PFFFT at single precision instead of KISS FFT
+    at double: about 1.7x on a whole analysis, and NOT what the component
+    ships. Gets its own build directory and its own archive name, so the two
+    can never be mistaken for one another. See cmake\fft_backend.cmake.
+
 .PARAMETER SkipTests
     Do not run the verification harness. Not recommended.
 
@@ -38,6 +44,9 @@
 
 .EXAMPLE
     .\scripts\build_release.ps1 -Arch x64 -Clean
+
+.EXAMPLE
+    .\scripts\build_release.ps1 -Pffft
 #>
 
 [CmdletBinding()]
@@ -45,6 +54,7 @@ param(
     [ValidateSet('x86', 'x64')]
     [string[]] $Arch = @('x86', 'x64'),
     [string]   $Configuration = 'Release',
+    [switch]   $Pffft,
     [switch]   $SkipTests,
     [switch]   $Clean
 )
@@ -74,6 +84,26 @@ if ($cmakeLists -notmatch '(?m)^\s*VERSION\s+([0-9]+(?:\.[0-9]+)*)') {
 $version = $Matches[1]
 Write-Host "foo_rubato $version" -ForegroundColor Cyan
 
+# --- which transform, and so which build tree and which archive -------------
+# PFFFT at float is a different analysis binary from KISS at double, and is
+# given its own of both. Sharing either would be a trap rather than a
+# convenience: CMake caches BPMCORE_FFT_BACKEND, so a plain build run after a
+# -Pffft one into the same directory would keep the cached pffft and package it
+# as the shipping component without saying so.
+#
+# One switch rather than the two options cmake\fft_backend.cmake takes, because
+# only two configurations are worth releasing. KISS at float is a precision
+# probe rather than something to ship, and PFFFT has no double to offer.
+$fftArgs = @()
+$suffix  = ''
+if ($Pffft) {
+    $fftArgs = @('-DBPMCORE_FFT_BACKEND=pffft', '-DBPMCORE_FFT_SCALAR=float')
+    $suffix  = '-pffft'
+    Write-Host '  spectral stage: PFFFT, float - not the shipping configuration' -ForegroundColor Yellow
+} else {
+    Write-Host '  spectral stage: KISS FFT, double' -ForegroundColor DarkGray
+}
+
 foreach ($dir in @($stage, $symbols)) {
     if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
 }
@@ -81,13 +111,13 @@ New-Item -ItemType Directory -Force $stage, $symbols, $distDir | Out-Null
 
 foreach ($a in $Arch) {
     $platform = if ($a -eq 'x64') { 'x64' } else { 'Win32' }
-    $buildDir = Join-Path $root "build\$a"
+    $buildDir = Join-Path $root "build\$a$suffix"
 
     if ($Clean -and (Test-Path $buildDir)) { Remove-Item -Recurse -Force $buildDir }
 
     Write-Host "`n=== Configuring $a ===" -ForegroundColor Cyan
     Invoke-Checked "cmake configure ($a)" {
-        & cmake -S $root -B $buildDir -A $platform
+        & cmake -S $root -B $buildDir -A $platform @fftArgs
     }
 
     Write-Host "`n=== Building $a ===" -ForegroundColor Cyan
@@ -125,8 +155,8 @@ foreach ($a in $Arch) {
 # cmake -E tar produces the same zip on every PowerShell version, and CMake is
 # already a hard dependency here.
 Write-Host "`n=== Package ===" -ForegroundColor Cyan
-$componentPath = Join-Path $distDir "foo_rubato-$version.fb2k-component"
-$symbolsPath   = Join-Path $distDir "foo_rubato-$version-symbols.zip"
+$componentPath = Join-Path $distDir "foo_rubato-$version$suffix.fb2k-component"
+$symbolsPath   = Join-Path $distDir "foo_rubato-$version$suffix-symbols.zip"
 foreach ($p in @($componentPath, $symbolsPath)) {
     if (Test-Path $p) { Remove-Item -Force $p }
 }
@@ -147,3 +177,10 @@ Write-Host @"
 To install: drag the .fb2k-component file onto foobar2000, or use
 File > Preferences > Components > Install...
 "@ -ForegroundColor Yellow
+
+if ($Pffft) {
+    Write-Host @"
+This one analyses with PFFFT at single precision. It is not the release build:
+install it to measure or to test, and do not publish it under that name.
+"@ -ForegroundColor Yellow
+}

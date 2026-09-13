@@ -37,6 +37,11 @@ installs everywhere. Symbols are packaged separately as
 `dist\foo_rubato-<version>-symbols.zip`; keep them so crash reports can be
 resolved, but do not ship them.
 
+`-Pffft` builds the same component on the faster single-precision transform
+instead - about 1.7x on a whole analysis, and not what is shipped. It uses its
+own build directory and puts `-pffft` in the archive name, so the two cannot be
+mistaken for one another; `cmake\fft_backend.cmake` is what sits underneath it.
+
 To work on it in Visual Studio, configure once and open the generated solution:
 
     cmake -S . -B build\x64 -A x64
