@@ -579,9 +579,20 @@ into one binary at the same width and requires them to agree on every size
 bpmcore can ask for; the worst disagreement is 1.3e-7 relative, about one float
 epsilon, which is what two correct implementations differing only in summation
 order should give. Then the whole collection was analysed again with PFFFT and
-diffed against the KISS run: **no track changed its class, meter or metrical
-level**, the largest BPM disagreement was 1.1e-5, and tap accuracy was identical
-to two decimals.
+diffed against the KISS run: of the 12,157 tracks both runs analysed, **not one
+moved at all** - no class, no meter, no metrical level - against the 287 in
+12,160 a meaningless refit moves. Half the collection agreed to the last digit
+printed; the 99th percentile of the BPM disagreement was 1.3e-5 and the largest
+anywhere was 0.056. Tap accuracy came out identical against 3,692 hand taps,
+37.84% exact and 97.75% on the right level, with no track landing either closer
+to its tap or further from it.
+
+One track's confidence moved 0.20 without its answer changing, which is the same
+discrete jump the float sweep turned up: a feature crossing a split sends the
+walk down the other side of a tree, and the tree votes differently while the
+sum still lands on the same class. It is worth remembering that this is what a
+near miss looks like here - not a drift in the BPM, but a confidence that falls
+while the answer stays put.
 
 Two things worth knowing about PFFFT, both found by running it rather than
 reading it:
