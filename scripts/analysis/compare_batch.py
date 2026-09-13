@@ -12,7 +12,11 @@ this reports what moved.
 
     build/prec-double/.../bpmcore_test batch tracks.txt > double.tsv
     build/prec-float/.../bpmcore_test  batch tracks.txt > float.tsv
-    python compare_batch.py double.tsv float.tsv
+    python compare_batch.py double.tsv float.tsv [tags.jsonl]
+
+Given the tag dump as a third argument it also scores both runs against the
+hand taps, which is where the churn is worth judging rather than merely
+counting: two runs can differ on a track and the second still be right.
 
 Accuracy against the ground truth is not the measure here, and reporting it
 alone would hide the thing worth knowing: a change can leave accuracy exactly
@@ -25,6 +29,8 @@ different fold split, a nuisance change that cannot carry meaning, moves 287 of
 12,160 tracks. A difference smaller than that is below the noise the model
 already has.
 """
+import json
+import os
 import sys
 from collections import Counter
 
@@ -69,6 +75,52 @@ def level_flip(a, b):
     return any(abs(r - t) / t < 0.03 for t in (2.0, 0.5, 3.0, 1.0 / 3.0))
 
 
+def load_taps(path):
+    """Hand taps by track path, from the dump scan_tags.py writes.
+
+    An integer BPM tag is a hand tap and a fractional one was written by a
+    machine, so only the integers count - the rule lives in tango_labels.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import tango_labels
+    taps = {}
+    with open(path, encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            t = tango_labels.hand_tapped(rec)
+            if t is not None:
+                taps[rec['path']] = t
+    return taps
+
+
+def tap_score(rows, taps, paths):
+    """Error against the tap, on evaluate.py's definitions.
+
+    The estimate is rounded before the error is taken, and "right level" is
+    within 6% of the tap - which is what separates reading the bar for the
+    beat from merely being a few BPM out.
+    """
+    errs = []
+    for p in paths:
+        if p in taps and p in rows and rows[p]['ok']:
+            errs.append((abs(round(rows[p]['bpm']) - taps[p]), taps[p]))
+    if not errs:
+        return None
+    n = len(errs)
+    pct = lambda f: 100.0 * sum(1 for e, h in errs if f(e, h)) / n
+    return {
+        'n': n,
+        'exact': pct(lambda e, h: e < 0.5),
+        'le1': pct(lambda e, h: e <= 1),
+        'le2': pct(lambda e, h: e <= 2),
+        'le3': pct(lambda e, h: e <= 3),
+        'level': pct(lambda e, h: e <= 0.06 * h),
+    }
+
+
 def quantiles(xs, ps):
     if not xs:
         return [0.0] * len(ps)
@@ -85,6 +137,7 @@ def main(argv):
         sys.stderr.write(__doc__)
         return 2
     a_name, b_name = argv[1], argv[2]
+    tags_name = argv[3] if len(argv) > 3 else None
     A, B = read(a_name), read(b_name)
 
     shared = [p for p in A if p in B]
@@ -148,6 +201,31 @@ def main(argv):
           % (REFIT_NOISE, REFIT_TOTAL, 100.0 * REFIT_NOISE / REFIT_TOTAL, scaled))
     print('verdict: %s the noise the model already carries'
           % ('BELOW' if len(moved) <= scaled else 'ABOVE'))
+
+    if tags_name:
+        taps = load_taps(tags_name)
+        sa, sb = tap_score(A, taps, both), tap_score(B, taps, both)
+        if sa and sb:
+            print()
+            print('against %d hand taps' % sa['n'])
+            print('  %-8s %7s %7s %7s %7s %12s' % ('', 'exact', '<=1', '<=2', '<=3', 'right level'))
+            for name, sc in (('first', sa), ('second', sb)):
+                print('  %-8s %6.2f%% %6.2f%% %6.2f%% %6.2f%% %11.2f%%'
+                      % (name, sc['exact'], sc['le1'], sc['le2'], sc['le3'], sc['level']))
+            # The judgement the counts cannot make: of the tracks that moved,
+            # how many moved towards the tap and how many away.
+            closer = further = 0
+            for p in both:
+                if p not in taps:
+                    continue
+                ea = abs(round(A[p]['bpm']) - taps[p])
+                eb = abs(round(B[p]['bpm']) - taps[p])
+                if eb < ea:
+                    closer += 1
+                elif eb > ea:
+                    further += 1
+            print('  %d tapped tracks land closer to their tap, %d further'
+                  % (closer, further))
 
     if flips or classes:
         print()
