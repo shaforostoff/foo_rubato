@@ -19,6 +19,11 @@
 //       run the whole chain and print the result, for comparison against the
 //       Python reference implementation the model was developed with.
 //
+//   fft_sizes
+//       check the size the transform is given is one the backend can take, at
+//       every sample rate a file might carry, and that the window it makes is
+//       still the duration the model was fitted at. Needs no audio.
+//
 //   batch <list of audio files> [threads]
 //       decode and analyse every track in a list file, one TSV row each, so
 //       two builds of the analysis can be compared over a whole collection.
@@ -37,6 +42,7 @@
 // The harness reaches past the public interface for the classifier check, so
 // that the feature count and the tree walk are not restated here.
 #include <bpmcore/internal.h>
+#include <bpmcore/real_fft.h>
 
 #include <algorithm>
 #include <chrono>
@@ -200,6 +206,71 @@ namespace
 	//!
 	//! A track that will not decode still gets a row, so that two runs stay line
 	//! for line and a diff shows only what the analysis did.
+	//! The size the transform is given, at every rate a file might carry.
+	//!
+	//! Two things have to hold at once, and the second is why this is a test
+	//! rather than a comment. The size must be one the backend can actually
+	//! transform - pffft checks that with assert() alone, so a release build
+	//! would hand back a setup for a size it cannot do and then produce a wrong
+	//! spectrum in silence. And the window it makes must still last about the
+	//! 46.4ms the model was fitted at, because pffft's restriction is coarser
+	//! than kiss's: sizes are 32 apart rather than 2, so rounding to one can
+	//! move the window further than it used to.
+	int run_fft_sizes()
+	{
+		// Every rate `analyse` will see. The ones that are the model rate times a
+		// power of two go straight through; the rest are resampled unless no
+		// usable ratio exists, and it is that fallback this is really about.
+		static const unsigned rates[] = {
+			8000, 11025, 12000, 16000, 22050, 24000, 32000, 37800, 44056, 44100,
+			47250, 48000, 50000, 50400, 64000, 88200, 96000, 176400, 192000 };
+
+		int failed = 0;
+		double worst_error = 0.0;
+		unsigned worst_rate = 0;
+
+		for (unsigned rate : rates)
+		{
+			const int ideal = static_cast<int>(std::lround(bpmcore::odf_window_seconds * rate));
+			const int nfft = bpmcore::fft_size_for(ideal);
+
+			if (!bpmcore::fft_size_supported(nfft))
+			{
+				std::printf("FAIL  %6u Hz  size %d is not one the backend can transform\n",
+				            rate, nfft);
+				failed++;
+				continue;
+			}
+
+			const double window_ms = 1000.0 * nfft / rate;
+			const double want_ms = 1000.0 * bpmcore::odf_window_seconds;
+			const double error = std::fabs(window_ms - want_ms) / want_ms;
+			if (error > worst_error) { worst_error = error; worst_rate = rate; }
+
+			std::printf("      %6u Hz  ideal %5d  size %5d  window %5.2fms  (%+.1f%%)\n",
+			            rate, ideal, nfft, window_ms, 100.0 * (window_ms - want_ms) / want_ms);
+		}
+
+		// Every rate that is the model rate times a power of two lands exactly,
+		// under either backend, so this only ever bounds the odd-rate fallback.
+		// Measured there: kiss's grid is even 5-smooth sizes and costs at most
+		// 3.1%, at 8kHz; pffft's is 5-smooth multiples of 32, coarser, and costs
+		// at most 5.0%, at 47250Hz. 8% sits clear of both and well under what a
+		// broken size choice would give - plain powers of two would be 37.8% out
+		// at 32kHz, which is the regression this is really watching for.
+		const double limit = 0.08;
+		std::printf("worst window error %.2f%% at %u Hz (limit %.0f%%)\n",
+		            100.0 * worst_error, worst_rate, 100.0 * limit);
+		if (worst_error > limit)
+		{
+			std::printf("FAIL  the size restriction moved a window too far\n");
+			failed++;
+		}
+
+		std::printf("%s\n", failed == 0 ? "all rates give a usable size" : "FAILURES");
+		return failed == 0 ? 0 : 1;
+	}
+
 	int run_batch(const char * list_path, int threads)
 	{
 		std::ifstream in(list_path, std::ios::binary);
@@ -861,6 +932,7 @@ int main(int argc, char ** argv)
 		return run_profile(argv[2], static_cast<unsigned>(std::atoi(argv[3])),
 		                   argc >= 5 ? std::max(1, std::atoi(argv[4])) : 3,
 		                   argc >= 6 ? std::atoi(argv[5]) : 1);
+	if (mode == "fft_sizes") return run_fft_sizes();
 	if (mode == "batch" && argc >= 3)
 		return run_batch(argv[2], argc >= 4 ? std::atoi(argv[3]) : 0);
 	if (mode == "bench" && argc >= 4)
@@ -873,6 +945,7 @@ int main(int argc, char ** argv)
 		"       bpmcore_test resample\n"
 		"       bpmcore_test tempo_spread\n"
 		"       bpmcore_test pipeline <raw f32 mono file> <sample rate>\n"
+		"       bpmcore_test fft_sizes\n"
 		"       bpmcore_test batch <list of audio files> [threads]\n"
 		"       bpmcore_test bench <raw f32 mono file> <sample rate> [repeats]\n"
 		"       bpmcore_test trajectory <raw f32 mono file> <sample rate>\n");

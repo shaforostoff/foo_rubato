@@ -34,4 +34,9 @@ add_test(NAME resample COMMAND bpmcore_test resample)
 # audio too.
 add_test(NAME tempo_spread COMMAND bpmcore_test tempo_spread)
 
+# Checks the transform is never handed a size its backend cannot do - pffft
+# would not complain, it would just be wrong - and that the size restriction
+# has not moved the analysis window off the duration the model was fitted at.
+add_test(NAME fft_sizes COMMAND bpmcore_test fft_sizes)
+
 set_target_properties(bpmcore_test PROPERTIES FOLDER "Tests")

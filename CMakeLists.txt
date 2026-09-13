@@ -20,7 +20,7 @@ endif()
 project(foo_rubato
         VERSION 0.1.0
         DESCRIPTION "Rubato BPM Analyzer for foobar2000"
-        LANGUAGES C CXX)   # kiss_fft is C
+        LANGUAGES C CXX)   # kiss_fft and pffft are C
 
 if(NOT WIN32)
     message(FATAL_ERROR "foo_rubato targets the Windows build of foobar2000.")
@@ -111,7 +111,16 @@ endif()
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/fb2k_sdk.cmake")
 
+# Settled before the targets, so kiss_fft, pffft and bpmcore cannot disagree
+# about the width. bpmcore includes this too, for a standalone build.
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/fft_backend.cmake")
+
+# Both transforms are always built, whichever one bpmcore links. kiss is two
+# files and costs nothing to carry, and it is what pffft is checked against on
+# each architecture - see fft_backend_test. That is worth more than a fallback
+# nobody would ship.
 add_subdirectory(kiss_fft)
+add_subdirectory(pffft)
 add_subdirectory(bpmcore)
 add_subdirectory(foo_rubato)
 
@@ -119,6 +128,7 @@ option(FOO_RUBATO_BUILD_TESTS "Build the verification harnesses" ON)
 if(FOO_RUBATO_BUILD_TESTS)
     enable_testing()
     add_subdirectory(kiss_fft_test)
+    add_subdirectory(fft_backend_test)
     add_subdirectory(bpmcore_test)
     add_subdirectory(dialog_test)
 endif()

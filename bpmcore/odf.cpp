@@ -1,7 +1,6 @@
 #include "internal.h"
 #include "parallel.h"
-
-#include <kiss_fft/kiss_fftr.h>
+#include "real_fft.h"
 
 #include <algorithm>
 #include <atomic>
@@ -24,39 +23,6 @@ const double odf_band_edges_hz[odf::band_count + 1] =
 
 namespace
 {
-	//! Nearest even integer to `n` with no prime factor above 5.
-	//!
-	//! The window has to last 46.4ms whatever the rate, or the analysis is not
-	//! the one the model was fitted at. A rate that is the model rate times a
-	//! power of two hits that exactly and lands on 1024, 2048, 4096 - and those
-	//! are the only rates `analyse` lets through, because anything else is
-	//! resampled first. This matters on the one path that is left: when the
-	//! ratio is unusable the resampler stands aside and the track is analysed at
-	//! its own rate, and there a power of two can be a long way out. 48kHz would
-	//! take 2048 points for 42.7ms; 32kHz would take 2048 for 64ms, a window
-	//! nearly 40% too long.
-	//!
-	//! Restricting to 2, 3 and 5 keeps the transform fast: those are the radices
-	//! kiss_fft has butterflies for, and anything else drops to a generic stage
-	//! quadratic in the factor. Powers of two are 5-smooth, so every rate that
-	//! does reach here by the ordinary route gets exactly what it got before.
-	int nearest_smooth(int n)
-	{
-		if (n < 2) return 2;
-		const auto smooth = [](int v)
-		{
-			if (v % 2 != 0) return false;          // kiss_fftr needs an even size
-			for (int f : { 2, 3, 5 }) while (v % f == 0) v /= f;
-			return v == 1;
-		};
-		for (int d = 0; d <= n; d++)
-		{
-			if (n - d >= 2 && smooth(n - d)) return n - d;
-			if (smooth(n + d)) return n + d;
-		}
-		return n + (n & 1);
-	}
-
 	//! Symmetric Hann window, matching numpy's hanning(), which is what the
 	//! model was trained against.
 	double hann(int i, int n)
@@ -64,22 +30,12 @@ namespace
 		return n > 1 ? 0.5 * (1.0 - std::cos(6.283185307179586 * i / (n - 1))) : 1.0;
 	}
 
-	struct fftr_cfg
-	{
-		kiss_fftr_cfg cfg = nullptr;
-		explicit fftr_cfg(int n) : cfg(kiss_fftr_alloc(n, 0, nullptr, nullptr)) {}
-		~fftr_cfg() { kiss_fftr_free(cfg); }
-		fftr_cfg(const fftr_cfg &) = delete;
-		fftr_cfg & operator=(const fftr_cfg &) = delete;
-	};
-
 	//! Everything the per-frame loop needs that does not change between frames.
 	struct stft_plan
 	{
 		const float * mono = nullptr;
 		int hop = 0;
 		int nfft = 0;
-		int nbin = 0;
 		int bin_lo = 0;
 		int span = 0;
 		int band_lo[odf::band_count] = { 0 };
@@ -100,10 +56,10 @@ namespace
 	{
 	public:
 		explicit stft_worker(const stft_plan & plan)
-			: m_plan(plan), m_fft(plan.nfft), m_frame(plan.nfft),
-			  m_spectrum(plan.nbin), m_prev(plan.span, 0.0), m_cur(plan.span, 0.0) {}
+			: m_plan(plan), m_fft(plan.nfft),
+			  m_prev(plan.span, 0.0), m_cur(plan.span, 0.0) {}
 
-		bool valid() const { return m_fft.cfg != nullptr; }
+		bool valid() const { return m_fft.valid(); }
 
 		//! Frames [begin, end). The frame before `begin` is re-derived here, so
 		//! the result does not depend on how the work was divided - one thread
@@ -115,12 +71,15 @@ namespace
 			for (int f = first; f < end; f++)
 			{
 				const float * src = p.mono + static_cast<std::size_t>(f) * p.hop;
-				// The product is formed in double whatever the transform's width:
-				// the window carries the loudness normalisation, and rounding it
-				// to the input's width before multiplying would quantise that.
+				// Written straight into the transform's own buffer, which is
+				// aligned however the backend needs it. The product is formed in
+				// double whatever the transform's width: the window carries the
+				// loudness normalisation, and rounding it to the input's width
+				// before multiplying would quantise that.
+				fft_scalar * frame = m_fft.input();
 				for (int i = 0; i < p.nfft; i++)
-					m_frame[i] = static_cast<kiss_fft_scalar>(src[i] * p.window[i]);
-				kiss_fftr(m_fft.cfg, m_frame.data(), m_spectrum.data());
+					frame[i] = static_cast<fft_scalar>(src[i] * p.window[i]);
+				m_fft.forward();
 
 				// Two tight loops rather than one fused one. Computing the whole
 				// span of logarithms first and differencing afterwards measured a
@@ -128,7 +87,7 @@ namespace
 				// pipelines cleanly only when nothing else is storing alongside
 				// it. log(1 + z) rather than log1p(z): z is never small enough
 				// here for the difference to reach the sums, and log is faster.
-				const kiss_fft_cpx * bins = m_spectrum.data() + p.bin_lo;
+				const fft_cpx * bins = m_fft.bins() + p.bin_lo;
 				for (int k = 0; k < p.span; k++)
 				{
 					const double re = bins[k].r, im = bins[k].i;
@@ -161,9 +120,7 @@ namespace
 
 	private:
 		const stft_plan & m_plan;
-		fftr_cfg m_fft;
-		std::vector<kiss_fft_scalar> m_frame;
-		std::vector<kiss_fft_cpx> m_spectrum;
+		real_fft m_fft;
 		std::vector<double> m_prev, m_cur;
 	};
 
@@ -178,8 +135,8 @@ bool compute_odf(const float * mono, std::size_t count, unsigned sample_rate,
 	if (mono == nullptr || count == 0 || sample_rate == 0) return false;
 
 	const int hop = std::max(1, static_cast<int>(std::lround(odf_hop_seconds * sample_rate)));
-	const int nfft = nearest_smooth(std::max(16,
-		static_cast<int>(std::lround(odf_window_seconds * sample_rate))));
+	const int nfft = fft_size_for(
+		static_cast<int>(std::lround(odf_window_seconds * sample_rate)));
 	const int nbin = nfft / 2 + 1;
 
 	if (count < static_cast<std::size_t>(nfft) + static_cast<std::size_t>(hop) * 8) return false;
@@ -195,7 +152,6 @@ bool compute_odf(const float * mono, std::size_t count, unsigned sample_rate,
 	plan.mono = mono;
 	plan.hop = hop;
 	plan.nfft = nfft;
-	plan.nbin = nbin;
 	plan.total_frames = total_frames;
 	plan.frames = out.frames;
 

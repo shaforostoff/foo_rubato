@@ -46,8 +46,10 @@ To work on it in Visual Studio, configure once and open the generated solution:
 ### Layout
 
 * `bpmcore/` is the analysis, and has no host in it - no foobar2000, no pfc, no
-  ATL, no `windows.h`. Only the standard library and KISS FFT, so the same
-  sources build for a command line tool, a macOS host or an ARM target. Start at
+  ATL, no `windows.h`. Only the standard library and one FFT, reached through
+  `bpmcore/real_fft.h` so that no other file names a transform, so the same
+  sources build for a command line tool, a macOS host or an Android target.
+  Start at
   `bpmcore/bpmcore.h`. The three stages that are worth spreading across cores -
   resampling, the envelope and the autocorrelation - all divide their work so
   that the answer does not depend on the thread count.
@@ -279,14 +281,21 @@ lower case in an iTunes freeform atom and the standard `TKEY` frame in ID3.
   pfc, the SDK proper, libPPUI and helpers - behind the `fb2k::sdk` target.
   This component needs the whole stack rather than the SDK core alone, because
   it has dialogs, a preferences page and a preferences-backed tag writer.
-* `kiss_fft` is built with `kiss_fft_scalar=double` as a PUBLIC define, so the
-  library and the code including its headers cannot disagree about the layout
-  of `kiss_fft_cpx`.
+* `kiss_fft` and `pffft` are both vendored, and both are always built. Which
+  one `bpmcore` links, and at what width, is `cmake/fft_backend.cmake`'s
+  decision - `-DBPMCORE_FFT_BACKEND=kiss|pffft` and
+  `-DBPMCORE_FFT_SCALAR=double|float`. pffft is about six times faster at these
+  sizes and is single precision only; kiss is portable scalar C and builds
+  anywhere. The default is kiss at double, which is what the component ships.
 * `kiss_fft_test` checks the vendored library against stored reference
   spectra, and is wired into CTest. It existed for the half-complex packing the
   legacy engine's FFT wrapper performed; that wrapper is gone and `bpmcore`
-  reads `kiss_fftr`'s bins directly, so what is left guards the dependency
-  `bpmcore` does still have.
+  reads the bins directly, so what is left guards the dependency `bpmcore` does
+  still have.
+* `fft_backend_test` checks pffft against kiss at every size `bpmcore` can ask
+  for. That is what makes the fast transform safe to swap in, and it is the
+  thing to run first on a new architecture - pffft falls back to scalar code
+  silently when it finds no SIMD, and this prints the width it settled on.
 * `bpmcore_test` checks that the decision trees compiled into
   `bpmcore/rhythm_model.h` still reproduce the classifier they were exported
   from, and is wired into CTest too. It also runs the analysis over raw PCM:
@@ -340,9 +349,9 @@ the flag is kept mostly to make it namable.
 Using the analysis elsewhere
 ----------------------------
 
-`bpmcore` is a static library with one public header. Its only dependency is
-KISS FFT, built with `kiss_fft_scalar=double`; there is no foobar2000, Windows
-or ATL in it.
+`bpmcore` is a static library with one public header. Its only dependency is a
+transform - KISS FFT by default, or pffft where speed matters more than
+portability; there is no foobar2000, Windows or ATL in it.
 
 ```cpp
 #include <bpmcore/bpmcore.h>
@@ -372,3 +381,4 @@ Links
 * [BPM Analyser](http://www.hydrogenaudio.org/forums/index.php?showtopic=77142),
   the original component, on the foobar2000 forum
 * [KISS FFT](http://sourceforge.net/projects/kissfft/)
+* [PFFFT](https://bitbucket.org/jpommier/pffft)

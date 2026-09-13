@@ -522,6 +522,74 @@ the result, where a float FFT accumulates over all its stages — but it means
 the width the features arrive at was never the double one.
 
 
+### Swapping the transform for PFFFT
+
+With the width settled, the library was the remaining question, and it is a
+different one: PFFFT reorders its output, packs the two real-valued bins
+together, computes with different butterflies in a different order, and refuses
+sizes KISS accepts. None of that can be argued from the source.
+
+At the sizes bpmcore uses it is **about six times faster** than KISS, measured
+over the same frames on the same machine:
+
+| N | KISS | PFFFT ordered | PFFFT raw |
+|---|-----:|--------------:|----------:|
+| 1024 | 71.9ms | 11.2ms (6.4x) | 10.0ms (7.2x) |
+| 2048 | 107.5ms | 19.1ms (5.6x) | 17.3ms (6.2x) |
+| 4096 | 131.9ms | 21.9ms (6.0x) | 20.2ms (6.5x) |
+
+The ordered variant is the one used. The raw layout is about a tenth faster but
+permuted, and band edges are bin numbers, so a permuted spectrum would have to
+be reordered anyway.
+
+End to end that is less dramatic, because the transform is 65% of the envelope
+loop rather than all of it, and the envelope carries fixed costs the transform
+does not touch - the loudness pass over the whole track, and the setup. On a
+three-minute side at 44.1kHz, single threaded:
+
+| | KISS, double | PFFFT, float |
+|---|---:|---:|
+| envelope | 0.1994s | 0.1143s |
+| whole analysis | 0.2136s | 0.1284s |
+
+**1.74x on the envelope, 1.66x overall.** On the desktop that is still invisible
+next to the decode; on ARM, where the envelope is a much larger share of a
+battery-powered budget, it is the point of the exercise.
+
+Correctness was checked twice over. `fft_backend_test` builds both transforms
+into one binary at the same width and requires them to agree on every size
+bpmcore can ask for; the worst disagreement is 1.3e-7 relative, about one float
+epsilon, which is what two correct implementations differing only in summation
+order should give. Then the whole collection was analysed again with PFFFT and
+diffed against the KISS run: **no track changed its class, meter or metrical
+level**, the largest BPM disagreement was 1.1e-5, and tap accuracy was identical
+to two decimals.
+
+Two things worth knowing about PFFFT, both found by running it rather than
+reading it:
+
+* **It does not enforce its own size restriction.** `pffft_new_setup` checks
+  `N % 32` with `assert()` alone, so a release build hands back a working-looking
+  setup for a size it cannot transform and then produces a wrong spectrum in
+  silence. `fft_size_for` and `fft_size_supported` in `bpmcore/real_fft.h` are
+  what stand in the way, and the `fft_sizes` case in `bpmcore_test` is what
+  keeps them honest.
+* **Its size grid is coarser than KISS's**, 5-smooth multiples of 32 against
+  even 5-smooth numbers, so rounding the window to a usable size can move it
+  further. Every rate that is the model rate times a power of two still lands
+  exactly, under either. On the odd-rate fallback, where no usable resampling
+  ratio existed, KISS costs at most 3.1% of the window duration and PFFFT at
+  most 5.0% - against the 37.8% a plain power of two would cost at 32kHz.
+
+PFFFT also falls back to scalar code, silently, when it finds no SIMD for the
+target. `fft_backend_test` prints `pffft_simd_size()` for that reason: a build
+that quietly lost its SIMD is six times slower than it was meant to be and says
+nothing about it.
+
+The default stays KISS at double. The component ships what it has always
+shipped, and the fast path is there for the build that needs it.
+
+
 Reproducing the model
 ---------------------
 
