@@ -3,6 +3,10 @@
 /external
 /dist
 
+# Finder, which now has a reason to visit: the macOS build writes a bundle,
+# and Finder leaves one of these in every directory it is shown.
+.DS_Store
+
 # Visual Studio / CMake user state
 /.vs
 /CMakeUserPresets.json

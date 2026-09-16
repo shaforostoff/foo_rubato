@@ -6,6 +6,59 @@ Change Log
 
 ### Version 0.1.0
 
+* **It runs on macOS.** `scripts/build_release_macos.sh` builds one universal
+  bundle - Apple Silicon and Intel - and packages it as
+  `mac/foo_rubato.component` inside a `.fb2k-component`, which is where
+  foobar2000 for Mac 2.6 and newer looks. Given the archive the Windows script
+  produced, `--merge` folds the two together into a single download that
+  installs on either platform; each host takes the folder it knows and ignores
+  the rest.
+* The analysis did not move to get there. `bpmcore` was already free of
+  foobar2000, pfc, ATL and `windows.h`, and it compiled for macOS unchanged -
+  the port is the shell around it. What was Win32 in that shell was the window
+  system and three small things beside it: `uMessageBox` became the SDK's own
+  cross-platform `fb2k::messageBox`, `SetThreadPriority` became
+  `QOS_CLASS_UTILITY`, which is macOS's name for the same intent, and
+  `sscanf_s` became `sscanf`, which for `%f` differs in nothing but which
+  compilers have it.
+* The windows are Cocoa, written in code rather than drawn in a nib, under
+  `foo_rubato/mac/`. `foo_rubato/bpm_ui.h` is the line between the two
+  platforms: two functions, one to put up the results window and one the tap
+  window, which is all the rest of the component knows about either. The
+  preferences page has no Apply button there and cannot have one - the macOS
+  preferences API hands back an `NSViewController` and that is the whole
+  contract - so each setting is written as it is changed, which is how
+  foobar2000 for Mac's own pages behave.
+* The BPM tag name is now read through `bpm_tag_name()` rather than off the
+  `cfg_var` directly. `cfg_string` is not one class: the SDK targets API 80 on
+  Windows and API 81 on macOS, and those select two implementations that share
+  no interface - the legacy one *is* a `pfc::string8`, the modern one keeps its
+  value behind `get()`. A `pfc::string8` is what both will give.
+* The tap window registers a tap on the way down rather than on the click
+  completing, which is the TODO the Windows dialog carries: a click held for
+  80ms is 80ms of error in a measurement whose entire content is when the
+  button went down.
+* The component is ad-hoc signed, and that is all foobar2000 for Mac asks for -
+  it runs under the hardened runtime but ships
+  `com.apple.security.cs.disable-library-validation`, so it will load code
+  signed by somebody else or by nobody. Signing at all is not optional: Apple
+  Silicon will not map unsigned code, and cross-building a universal binary
+  does not sign it for you.
+* `scripts/get_sdk.sh` fetches the SDK for a macOS build, and does not repeat
+  the pin: it reads the release, the URL and the checksum out of
+  `scripts\get_sdk.ps1`, which stays their one home. The about box states the
+  SDK release it was built against from that same file, so a second pin would
+  make it wrong on one platform and right on the other with nothing to say
+  which.
+* `scripts/build_release_macos.sh` builds with one fewer job than the machine
+  has cores rather than with all of them, and takes `-j` to say otherwise. A
+  job is a clang holding a translation unit with the SDK precompiled into it,
+  and a machine with other work on it can run out of memory and have the build
+  killed with an exit code and nothing else.
+* `dialog_test` is Windows only now. It draws dialog templates out of the built
+  DLL, and there are none in the macOS component - its windows are built in
+  code, where a label that does not fit is a layout constraint rather than a
+  resource. The other five harnesses run on both.
 * **Reggae is a fifth rhythm**, beside Tango, Vals and Milonga. It is there for
   the tempo rather than for the label: what a dancer taps in a reggae is the
   quarter note, and what the grid returns is usually the skank an octave above

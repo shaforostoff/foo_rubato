@@ -94,6 +94,17 @@
 // Which FFT licence belongs in the about text below - one, not both.
 #include "fft_license.h"
 
+// What this build runs on, which is not the same sentence on both platforms.
+#ifdef _WIN32
+#define FOO_RUBATO_PLATFORM \
+	"Built against the foobar2000 SDK " FOO_RUBATO_SDK_VERSION "; runs on 32 and\n" \
+	"64 bit foobar2000 for Windows.\n"
+#else
+#define FOO_RUBATO_PLATFORM \
+	"Built against the foobar2000 SDK " FOO_RUBATO_SDK_VERSION "; runs on Intel and\n" \
+	"Apple Silicon foobar2000 for Mac 2.6 or newer.\n"
+#endif
+
 DECLARE_COMPONENT_VERSION(
 	FOO_RUBATO_NAME,
 	FOO_RUBATO_VERSION,
@@ -116,8 +127,7 @@ DECLARE_COMPONENT_VERSION(
 	"track. Written to tags: the BPM, the opening tempo as INITIALBPM, and\n"
 	"BpmAlgorithm recording which analysis produced them.\n"
 	"\n"
-	"Built against the foobar2000 SDK " FOO_RUBATO_SDK_VERSION "; runs on 32 and\n"
-	"64 bit foobar2000.\n"
+	FOO_RUBATO_PLATFORM
 	"\n"
 	"(c) 2009-2014 Michael Balzer (fraganator@hotmail.com)\n"
 	"(c) 2014 Holger Stenger\n"

@@ -47,6 +47,15 @@ if(MSVC)
     # windows.h is not included here, but a consumer's precompiled header may
     # have dragged in its min/max macros before this target's headers.
     target_compile_definitions(bpmcore PUBLIC NOMINMAX)
+else()
+    target_compile_options(bpmcore PRIVATE -Wall -Wextra
+        # real_fft holds one set of fields for both backends, and the two
+        # pffft needs - its scratch buffer and the frame size it wants passed
+        # back - are never read in a kiss build. Keeping the layout the same
+        # either way is worth more than the two fields, and [[maybe_unused]] is
+        # not available to a member while this target still offers to compile
+        # as C++11.
+        -Wno-unused-private-field)
 endif()
 
 set_target_properties(bpmcore PROPERTIES FOLDER "bpmcore")

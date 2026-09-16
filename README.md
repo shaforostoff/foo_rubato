@@ -55,6 +55,68 @@ To work on it in Visual Studio, configure once and open the generated solution:
     cmake --build build\x64 --config Release
     ctest --test-dir build\x64 -C Release
 
+### macOS
+
+    ./scripts/build_release_macos.sh
+
+The Xcode command line tools and CMake are the only prerequisites. The script
+fetches the SDK into `external/` on first run - WTL is not needed there - builds
+one universal binary, runs the tests, pulls the debug info out into a `.dSYM`,
+signs the bundle and writes
+
+    dist/foo_rubato-<version>-mac.fb2k-component
+      mac/foo_rubato.component    universal: Apple Silicon and Intel
+
+foobar2000 for Mac 2.6 is the first release that loads third party components,
+and `mac/` is where it looks. Given the archive the Windows script produced,
+`--merge` puts both in one file:
+
+    ./scripts/build_release_macos.sh --merge dist/foo_rubato-<version>.fb2k-component
+
+    dist/foo_rubato-<version>.fb2k-component
+      foo_rubato.dll              32 bit Windows
+      x64/foo_rubato.dll          64 bit Windows
+      mac/foo_rubato.component    macOS
+
+which is one download that installs on either platform - each host takes the
+folder it knows and ignores the rest. What it does not do is leave the rest
+behind: foobar2000 unpacks the whole archive and then overwrites the root with
+the subfolder it wants, so a Windows install carries the macOS bundle on disk
+and a Mac install carries the DLLs. That costs half a megabyte either way and
+nothing else, and it is how the scheme already works for `arm64ec\` - but it is
+the reason to publish two archives instead if that matters.
+
+The macOS payload is built here and the Windows one is carried through
+untouched, so the merge is a packaging step and not a second build; it is safe
+to point at the archive in `dist/` that it is about to write over, because
+everything going into the new one is staged on disk before the old one is
+touched.
+
+The component is **ad-hoc signed** and that is all it needs. A Developer ID and
+notarization are not required: foobar2000 for Mac runs under the hardened
+runtime but ships `com.apple.security.cs.disable-library-validation`, which is
+the entitlement that lets it load code signed by somebody else - or by nobody.
+Signing at all is not optional, though. Apple Silicon will not map unsigned
+code, and cross-building a universal binary does not sign it for you, so an
+unsigned bundle fails to load on half the machines it is meant for. Pass
+`-s "Developer ID Application: ..."` to use a real identity instead.
+
+`--pffft` builds the same component on the faster single-precision transform,
+as `-Pffft` does on Windows. There is no `--dynamic`: that selects between the
+static and DLL Visual C++ runtimes, and there is no such choice to make against
+the system libc++.
+
+`-j` sets how many compile jobs run at once, and defaults to one fewer than the
+machine has cores rather than to all of them. A job here is a clang holding a
+translation unit with the foobar2000 SDK precompiled into it, which is large
+enough that a machine with other work on it can run out of memory and have the
+build killed - an exit code and nothing else. `-j 1` leaves a great deal more
+room and is what to use on a machine that is already short.
+
+    cmake -S . -B build/mac -DCMAKE_BUILD_TYPE=Release
+    cmake --build build/mac
+    ctest --test-dir build/mac
+
 ### Layout
 
 * `bpmcore/` is the analysis, and has no host in it - no foobar2000, no pfc, no
@@ -67,6 +129,12 @@ To work on it in Visual Studio, configure once and open the generated solution:
   that the answer does not depend on the thread count.
 * `foo_rubato/` is the foobar2000 component: decoding, tag writing, dialogs and
   preferences. It hands `bpmcore` mono PCM and gets a tempo and a rhythm back.
+  Everything above the window system is one set of sources for both platforms;
+  the window system is not. Windows gets WTL dialogs built from
+  `foo_rubato.rc`, macOS gets Cocoa windows built in code under
+  `foo_rubato/mac/`, and `foo_rubato/bpm_ui.h` is the line between them - two
+  functions, one to put up the results window and one the tap window, which is
+  all the rest of the component knows about either.
 * `bpmcore_test/` verifies the analysis without foobar2000 running, and can
   benchmark and profile it.
 * `scripts/analysis/` is the Python reference implementation and the training
@@ -87,7 +155,7 @@ is left on the preferences page is what a user would actually choose:
 There is nothing under **Preferences > Advanced > Tools** any more. Everything
 that was there has gone: the legacy-engine switch with the engine itself, and
 the two rhythm-tag entries with the tag writing, which is commented out in
-`rhythm_tag_or_empty` in `bpm_result_dialog.cpp`. An advanced-config entry
+`bpm_rhythm_tag_or_empty` in `bpm_result_format.h`. An advanced-config entry
 cannot register itself and stay out of the tree, so hiding one means not
 registering it; those are commented out in `preferences.cpp` along with the
 branch, and restoring all three places brings them back with their old values,
@@ -289,10 +357,25 @@ lower case in an iTunes freeform atom and the standard `TKEY` frame in ID3.
   are missing, so a fresh checkout needs no manual setup. WTL is a separate
   download because the SDK's helpers include `<atlapp.h>` but do not ship it;
   ATL itself comes with Visual Studio.
-* `cmake\fb2k_sdk.cmake` builds the SDK from source as four static libraries -
-  pfc, the SDK proper, libPPUI and helpers - behind the `fb2k::sdk` target.
-  This component needs the whole stack rather than the SDK core alone, because
-  it has dialogs, a preferences page and a preferences-backed tag writer.
+* `scripts/get_sdk.sh` is the macOS counterpart, and fetches the SDK alone.
+  The release, the URL and the checksum are not repeated in it: it reads them
+  out of `get_sdk.ps1`, which stays their one home. Two pins that have to be
+  updated together are two pins that will not be, and the about box states the
+  SDK release it was built against from that same file - so a Mac build
+  fetching a different one would make the about box wrong on one platform and
+  right on the other, with nothing to say which.
+* `cmake\fb2k_sdk.cmake` builds the SDK from source as static libraries behind
+  the `fb2k::sdk` target. This component needs the whole stack rather than the
+  SDK core alone, because it has dialogs, a preferences page and a
+  preferences-backed tag writer. What the stack is differs by platform: on
+  Windows, pfc, the SDK proper, libPPUI and helpers, with `shared.dll` linked
+  through its import library because it ships with foobar2000 itself. On macOS,
+  pfc, the SDK proper, the part of helpers that is not Win32, and `shared`
+  built from source - there is no dylib to import against. libPPUI does not
+  come along: it is Win32 window classes from top to bottom and the SDK ships
+  no Xcode project for it. Which files each platform compiles is not guesswork
+  - the exclusion lists are the difference between what is in each directory
+  and what the SDK's own Xcode projects build.
 * `kiss_fft` and `pffft` are both vendored, and both are always built. Which
   one `bpmcore` links, and at what width, is `cmake/fft_backend.cmake`'s
   decision - `-DBPMCORE_FFT_BACKEND=kiss|pffft` and
@@ -321,9 +404,12 @@ lower case in an iTunes freeform atom and the standard `TKEY` frame in ID3.
   collection to hand. It is also wired into CTest.
 * `dialog_test` draws the dialog templates out of the built DLL and checks that
   every label fits the control around it - see below. Wired into CTest as
-  `dialog_labels`.
+  `dialog_labels`. Windows only: there are no dialog templates in the macOS
+  component for it to read, its windows being built in code, where a label that
+  does not fit is a layout constraint rather than a resource.
 
-`build\`, `external\` and `dist\` are all ignored by git.
+`build\`, `external\` and `dist\` are all ignored by git, under either
+spelling.
 
 ### Looking at the dialogs without foobar2000
 
