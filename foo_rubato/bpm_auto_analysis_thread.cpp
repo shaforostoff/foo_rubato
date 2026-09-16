@@ -2,13 +2,44 @@
 #include "bpm_auto_analysis_thread.h"
 #include "bpm_analysis.h"
 #include "preferences.h"
-#include "bpm_result_dialog.h"
+#include "bpm_ui.h"
 
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+
+#ifndef _WIN32
+// The MB_* and ID* constants, which off Windows the SDK defines itself, and
+// the thread QoS classes.
+#include <SDK/messageBox.h>
+#include <pthread.h>
+#endif
+
+namespace
+{
+	//! A modal message box with the buttons MB_YESNO and friends name.
+	//!
+	//! Not fb2k::messageBox on both platforms, though it is the SDK's own
+	//! cross-platform drop-in and would save this function. It reaches the
+	//! screen through popup_message_v3, which the SDK marks "since 1.5", and
+	//! the 32 bit build declares itself loadable by foobar2000 1.2 and later -
+	//! FOOBAR2000_TARGET_VERSION_COMPATIBLE is 72 there. uMessageBox has no
+	//! such floor and is what this component has always called, so on Windows
+	//! it keeps calling it; a port is not the place to move the oldest
+	//! foobar2000 this runs on. uMessageBox is Win32 only - it takes an HWND
+	//! and lives in shared.dll's exports - which is why macOS needs the other
+	//! one.
+	int bpm_message_box(const char * text, unsigned type)
+	{
+#ifdef _WIN32
+		return uMessageBox(core_api::get_main_window(), text, "Rubato BPM Analyzer", type);
+#else
+		return fb2k::messageBox(core_api::get_main_window(), text, "Rubato BPM Analyzer", type);
+#endif
+	}
+}
 
 /***** Threading *****/
 //
@@ -74,11 +105,12 @@ void bpm_auto_analysis_thread::start()
 	// first. That is the one case worth asking about.
 	if (bpm_config_auto_write_tag)
 	{
+		const pfc::string8 bpm_tag = bpm_tag_name();
 		t_size tagged = 0;
 
 		for (t_size index = 0; index < m_infos.get_size(); index++)
 		{
-			if (m_infos[index].meta_exists(bpm_config_bpm_tag)) tagged++;
+			if (m_infos[index].meta_exists(bpm_tag)) tagged++;
 		}
 
 		const t_size total = m_tracks.get_count();
@@ -88,14 +120,13 @@ void bpm_auto_analysis_thread::start()
 			pfc::string_formatter message;
 			message << (total == 1 ? "The selected track already has a "
 			                       : "All of the selected tracks already have a ")
-			        << bpm_config_bpm_tag.get_ptr() << " tag, and \"write tags "
+			        << bpm_tag.get_ptr() << " tag, and \"write tags "
 			        << "automatically\" is on - so analysing "
 			        << (total == 1 ? "it" : "them")
 			        << " overwrites what the tag holds without showing you the "
 			        << "results first.\n\nAnalyse anyway?";
 
-			if (uMessageBox(core_api::get_main_window(), message.get_ptr(),
-			                "Rubato BPM Analyzer", MB_YESNO | MB_ICONQUESTION) != IDYES)
+			if (bpm_message_box(message.get_ptr(), MB_YESNO | MB_ICONQUESTION) != IDYES)
 			{
 				return;
 			}
@@ -104,17 +135,16 @@ void bpm_auto_analysis_thread::start()
 		{
 			pfc::string_formatter message;
 			message << tagged << " of the " << total << " selected tracks already have a "
-			        << bpm_config_bpm_tag.get_ptr() << " tag, and \"write tags "
+			        << bpm_tag.get_ptr() << " tag, and \"write tags "
 			        << "automatically\" is on - so analysing them overwrites what "
 			        << "those tags hold without showing you the results first.\n\n"
 			        << "Yes - analyse all " << total << "\n"
 			        << "No - analyse only the " << (total - tagged) << " with no "
-			        << bpm_config_bpm_tag.get_ptr() << " tag\n"
+			        << bpm_tag.get_ptr() << " tag\n"
 			        << "Cancel - analyse nothing";
 
-			const int response = uMessageBox(core_api::get_main_window(), message.get_ptr(),
-			                                 "Rubato BPM Analyzer",
-			                                 MB_YESNOCANCEL | MB_ICONQUESTION);
+			const int response = bpm_message_box(message.get_ptr(),
+			                                     MB_YESNOCANCEL | MB_ICONQUESTION);
 
 			if (response != IDYES && response != IDNO) return;
 
@@ -124,7 +154,7 @@ void bpm_auto_analysis_thread::start()
 
 				for (t_size index = 0; index < total; index++)
 				{
-					mask.set(index, m_infos[index].meta_exists(bpm_config_bpm_tag));
+					mask.set(index, m_infos[index].meta_exists(bpm_tag));
 				}
 
 				m_tracks.remove_mask(mask);
@@ -147,6 +177,24 @@ void bpm_auto_analysis_thread::start()
 
 namespace
 {
+	//! Ask for this thread to be scheduled below the ones that matter.
+	//!
+	//! A core count is only half of leaving room for playback. If the machine
+	//! ends up oversubscribed anyway, the scan is what should wait: playback
+	//! skipping is unforgivable, and a scan finishing a few seconds later is
+	//! not.
+	void deprioritise_this_thread()
+	{
+#ifdef _WIN32
+		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+#else
+		// QOS_CLASS_UTILITY is macOS's name for this exact case: long running
+		// work nobody is waiting on, which the scheduler is free to put on the
+		// efficiency cores and will hold behind anything interactive.
+		pthread_set_qos_class_self_np(QOS_CLASS_UTILITY, 0);
+#endif
+	}
+
 	//! Tracks scanned at once.
 	//!
 	//! Two cores short of the machine, so that starting a scan in the middle
@@ -213,11 +261,7 @@ namespace
 	                 std::vector<bpmcore::analysis> & results, std::vector<char> & missing,
 	                 int analysis_threads, abort_callback & abort)
 	{
-		// Below normal, because a core count is only half of leaving room for
-		// playback. If the machine ends up oversubscribed anyway, the scan is
-		// what should wait: playback skipping is unforgivable, and a scan
-		// finishing a few seconds later is not.
-		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+		deprioritise_this_thread();
 
 		worker_progress progress(state, slot);
 		const t_size total = tracks.get_count();
@@ -427,14 +471,7 @@ void bpm_auto_analysis_thread::on_done(ctx_t p_wnd, bool p_was_aborted)
 
 	if (!p_was_aborted && core_api::assert_main_thread())
 	{
-		bpm_result_dialog* m_result_dialog =
-			new bpm_result_dialog(m_tracks, m_infos, m_bpm_results, m_rhythms, m_spreads,
-			                      m_initial_bpms);
-
-		m_result_dialog->Create(core_api::get_main_window(), NULL);
-		if (m_result_dialog->IsWindow())
-		{
-			m_result_dialog->ShowWindow(SW_SHOWNORMAL);
-		}
+		bpm_show_results(m_tracks, m_infos, m_bpm_results, m_rhythms, m_spreads,
+		                 m_initial_bpms);
 	}
 }

@@ -15,8 +15,10 @@ bool file_info_filter_scale_bpm::apply_filter(metadb_handle_ptr p_track, t_files
 {
 	const char * str = p_info.meta_get(m_bpm_tag, 0);
 
+	// Plain sscanf rather than MSVC's sscanf_s: %f takes no buffer, so the two
+	// differ in nothing here but which compilers have them.
 	float bpm = 0.0f;
-	if ((str != NULL) && (sscanf_s(str, "%f", &bpm) == 1))
+	if ((str != NULL) && (sscanf(str, "%f", &bpm) == 1))
 	{
 		bpm = static_cast<float>(bpm * m_scale);
 
@@ -32,7 +34,7 @@ bool file_info_filter_scale_bpm::apply_filter(metadb_handle_ptr p_track, t_files
 		// level too, and the same factor puts both right.
 		const char * initial_str = p_info.meta_get(BPM_INITIAL_TAG, 0);
 		float initial = 0.0f;
-		if ((initial_str != NULL) && (sscanf_s(initial_str, "%f", &initial) == 1) && initial > 0)
+		if ((initial_str != NULL) && (sscanf(initial_str, "%f", &initial) == 1) && initial > 0)
 		{
 			p_info.meta_set(BPM_INITIAL_TAG,
 			                format_bpm(static_cast<double>(initial) * m_scale));

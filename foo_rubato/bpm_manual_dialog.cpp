@@ -7,6 +7,7 @@
 #include "preferences.h"
 #include "format_bpm.h"
 #include "file_info_filter_bpm.h"
+#include "bpm_ui.h"
 
 using std::string;
 
@@ -23,7 +24,7 @@ bpm_manual_dialog::bpm_manual_dialog():
 LRESULT bpm_manual_dialog::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 {
 	pfc::string_formatter bpm_tag_label;
-	bpm_tag_label << "BPM will be written to %" << bpm_config_bpm_tag.get_ptr() << "% tag.";
+	bpm_tag_label << "BPM will be written to %" << bpm_tag_name().get_ptr() << "% tag.";
 	uSetDlgItemText(m_hWnd, ID_MANUAL_BPM_TAG, bpm_tag_label);
 
 	ResetBPM();
@@ -39,7 +40,7 @@ LRESULT bpm_manual_dialog::OnUpdateFileClicked(UINT uNotifyCode, int nID, CWindo
 	{
 		metadb_io_v2::get()->update_info_async(
 			pfc::list_single_ref_t<metadb_handle_ptr>(track),
-			fb2k::service_new<file_info_filter_bpm>(track, bpm_config_bpm_tag, m_bpm),
+			fb2k::service_new<file_info_filter_bpm>(track, bpm_tag_name(), m_bpm),
 			core_api::get_main_window(),
 			metadb_io_v2::op_flag_background | metadb_io_v2::op_flag_delay_ui,
 			NULL);
@@ -132,4 +133,19 @@ void bpm_manual_dialog::SetBPM(double bpm)
 {
 	m_bpm = bpm;
 	uSetDlgItemText(m_hWnd, ID_BPM_MANUAL_BPM, format_bpm(m_bpm));
+}
+
+
+/***** bpm_ui.h *****/
+
+void bpm_show_manual_tap()
+{
+	// Deletes itself in PostNcDestroy, so it is not held onto here.
+	bpm_manual_dialog * dialog = new bpm_manual_dialog();
+
+	dialog->Create(core_api::get_main_window(), NULL);
+	if (dialog->IsWindow())
+	{
+		dialog->ShowWindow(SW_SHOWNORMAL);
+	}
 }

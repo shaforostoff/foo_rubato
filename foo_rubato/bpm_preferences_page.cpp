@@ -25,6 +25,7 @@ void bpm_preferences_page::reset()
 BOOL bpm_preferences_page::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 {
 	wchar_t w_bpm_tag[256];
+	const pfc::string8 bpm_tag = bpm_tag_name();
 
 	// Tagging. The list order must match bpm_precision_enum.
 	CComboBox bpm_precision_box = GetDlgItem(ID_CONFIG_BPM_PRECISION);
@@ -32,7 +33,7 @@ BOOL bpm_preferences_page::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	bpm_precision_box.AddString(_T("1 Decimal"));
 	bpm_precision_box.AddString(_T("2 Decimals"));
 	bpm_precision_box.SetCurSel(bpm_config_bpm_precision);
-	pfc::stringcvt::convert_ansi_to_wide(w_bpm_tag, 256, bpm_config_bpm_tag.get_ptr(), bpm_config_bpm_tag.length());
+	pfc::stringcvt::convert_ansi_to_wide(w_bpm_tag, 256, bpm_tag.get_ptr(), bpm_tag.length());
 	SetDlgItemText(ID_CONFIG_BPM_TAG, w_bpm_tag);
 	CheckDlgButton(ID_CONFIG_AUTO_WRITE_TAG, bpm_config_auto_write_tag ? BST_CHECKED : BST_UNCHECKED);
 	CheckDlgButton(ID_CONFIG_WRITE_INITIAL_BPM, bpm_config_write_initial_bpm ? BST_CHECKED : BST_UNCHECKED);
@@ -109,7 +110,7 @@ void bpm_preferences_page::apply()
 {
 	pfc::string8 bpm_tag;
 	uGetDlgItemText(*this, ID_CONFIG_BPM_TAG, bpm_tag);
-	bpm_config_bpm_tag = bpm_tag;
+	bpm_config_bpm_tag = bpm_tag.get_ptr();
 
 	bpm_config_taps_to_average = GetDlgItemInt(ID_CONFIG_TAPS_TO_AVERAGE, NULL, false);
 	bpm_config_seconds_to_reset_average = GetDlgItemInt(ID_CONFIG_SECONDS_TO_RESET_AVERAGE, NULL, false);
@@ -141,7 +142,7 @@ bool bpm_preferences_page::HasChanged()
 
 	pfc::string8 bpm_tag;
 	uGetDlgItemText(*this, ID_CONFIG_BPM_TAG, bpm_tag);
-	if (strcmp(bpm_config_bpm_tag, bpm_tag) != 0 ||
+	if (strcmp(bpm_tag_name(), bpm_tag) != 0 ||
 		bpm_config_taps_to_average != (int) GetDlgItemInt(ID_CONFIG_TAPS_TO_AVERAGE, NULL, false) ||
 		bpm_config_seconds_to_reset_average != (int) GetDlgItemInt(ID_CONFIG_SECONDS_TO_RESET_AVERAGE, NULL, false) ||
 		bpm_config_output_debug != (IsDlgButtonChecked(ID_CONFIG_OUTPUT_DEBUG) == BST_CHECKED) ||

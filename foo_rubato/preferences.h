@@ -6,7 +6,10 @@
 #include "guid.h"
 
 #include <SDK/foobar2000.h>
+#ifdef _WIN32
+// ATL and WTL, which the macOS build has neither of nor any use for.
 #include <helpers/atl-misc.h>
+#endif
 
 typedef enum
 {

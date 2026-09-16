@@ -3,7 +3,7 @@
 #include "guid.h"
 #include "globals.h"
 #include "bpm_auto_analysis_thread.h"
-#include "bpm_manual_dialog.h"
+#include "bpm_ui.h"
 #include "file_info_filter_scale_bpm.h"
 
 static contextmenu_group_popup_factory g_bpm_context_group(guid_bpm_context_group, contextmenu_groups::root, "Rubato BPM Analyzer", 0);
@@ -116,16 +116,17 @@ void bpm_contextmenu_item::run_auto_analysis(metadb_handle_list_cref p_data)
 
 void bpm_contextmenu_item::run_manual_analysis(metadb_handle_list_cref p_data)
 {
-	bpm_manual_dialog* dlg = new bpm_manual_dialog();
-	dlg->Create(core_api::get_main_window(), NULL);
-	dlg->ShowWindow(SW_SHOWNORMAL);
+	// The selection is deliberately not used: the window taps along with
+	// whatever is playing, and writes to the now playing track.
+	(void) p_data;
+	bpm_show_manual_tap();
 }
 
 void bpm_contextmenu_item::run_scale_bpm(metadb_handle_list_cref p_data, double p_scale)
 {
 	metadb_io_v2::get()->update_info_async(
 		p_data,
-		fb2k::service_new<file_info_filter_scale_bpm>(bpm_config_bpm_tag, p_scale),
+		fb2k::service_new<file_info_filter_scale_bpm>(bpm_tag_name(), p_scale),
 		core_api::get_main_window(),
 		metadb_io_v2::op_flag_background | metadb_io_v2::op_flag_delay_ui,
 		NULL);

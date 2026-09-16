@@ -46,6 +46,8 @@ add_library(foo_rubato MODULE
     bpm_manual_dialog.h
     bpm_preferences_page.h
     bpm_result_dialog.h
+    bpm_result_format.h
+    bpm_ui.h
     fft_license.h
     file_info_filter_bpm.h
     file_info_filter_scale_bpm.h

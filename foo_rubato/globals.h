@@ -34,6 +34,20 @@ extern cfg_bool bpm_config_output_debug;
 extern cfg_int bpm_config_taps_to_average;
 extern cfg_int bpm_config_seconds_to_reset_average;
 
+//! The tag the BPM is written to, as configured.
+//!
+//! Through a function rather than by reading bpm_config_bpm_tag directly,
+//! because cfg_string is not one class. foobar2000-versions.h targets API 80
+//! on Windows and API 81 on macOS, and cfg_var.h hands those two different
+//! implementations: cfg_var_legacy::cfg_string *is* a pfc::string8 and can be
+//! passed wherever one can, while cfg_var_modern::cfg_string keeps its value
+//! behind get() and has neither get_ptr() nor the conversion. A pfc::string8
+//! is what both will give, so that is what the rest of the component asks for.
+//!
+//! Each call reads the config afresh, so a value used more than once in a row
+//! - a name and its length, say - wants a local rather than two calls.
+pfc::string8 bpm_tag_name();
+
 // Advanced preferences. None are registered at present - see the note in
 // preferences.cpp for why, and for how to bring these two back.
 //extern advconfig_checkbox_factory bpm_config_write_rhythm_tag;

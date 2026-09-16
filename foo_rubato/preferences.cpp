@@ -16,6 +16,13 @@ cfg_bool bpm_config_output_debug(guid_bpm_config_output_debug, false);
 cfg_int bpm_config_taps_to_average(guid_bpm_config_taps_to_average, 30);
 cfg_int bpm_config_seconds_to_reset_average(guid_bpm_config_seconds_to_reset_average, 5);
 
+pfc::string8 bpm_tag_name()
+{
+	// One expression for both: the legacy class slices to its pfc::string8
+	// base, the modern one goes through its operator pfc::string8().
+	return bpm_config_bpm_tag;
+}
+
 // Advanced preferences - none at present, so the branch is not registered
 // either: an empty node under Preferences > Advanced > Tools would be worse
 // than no node. The switch that used to live here selected the legacy 2009
