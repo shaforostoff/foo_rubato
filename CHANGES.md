@@ -75,6 +75,14 @@ Change Log
   confidence and scikit-learn's own is unchanged at 5.0e-07. This is the half
   of the model that does not compress, so it is also the only part where the
   download shrinks with the binary - about 44,500 bytes per copy.
+* A scan of a long track holds much less memory. The audio buffer is sized
+  from the length the metadb already knows rather than from a nominal four
+  minutes, so a track past that no longer doubles its buffer and copy itself
+  into the larger one - which had both resident at once. A fifteen minute side
+  at 44.1kHz peaks at 152MB where it used to reach 273MB, and a six minute one
+  at 61MB where it reached 101MB; a track under four minutes is unchanged,
+  because the reserve was never touched pages. That is per scanning thread, and
+  there are cores-2 of those.
 * **Reggae is a fifth rhythm**, beside Tango, Vals and Milonga. It is there for
   the tempo rather than for the label: what a dancer taps in a reggae is the
   quarter note, and what the grid returns is usually the skank an octave above

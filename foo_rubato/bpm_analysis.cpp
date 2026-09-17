@@ -76,7 +76,9 @@ bpmcore::analysis bpm_analyse(const metadb_handle_ptr & track,
 		if (collector == nullptr)
 		{
 			sample_rate = srate;
-			collector.reset(new bpmcore::collector(srate));
+			// The length the metadb already holds, so the buffer is sized
+			// for this side rather than for a nominal four minutes.
+			collector.reset(new bpmcore::collector(srate, track->get_length()));
 		}
 		else if (srate != sample_rate)
 		{
