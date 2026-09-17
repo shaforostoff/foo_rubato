@@ -13,6 +13,7 @@ The form both halves speak is sklearn's own: `flat`, one
 marking a leaf and child indices relative to the tree's own slice; and
 `offsets`, where each tree starts in it.
 """
+import struct
 
 # Every index the header stores is a short. 750 trees of 15 leaves is nowhere
 # near the limit, but a refit with a much larger max_iter would be, and a
@@ -21,13 +22,45 @@ marking a leaf and child indices relative to the tree's own slice; and
 SHORT_MAX = 32767
 
 
+def _as_float32(v):
+    """`v` rounded to the nearest float, still as a Python float."""
+    return struct.unpack('f', struct.pack('f', v))[0]
+
+
+def _narrow(values, what):
+    """`values` as float32, refusing to round any of them.
+
+    Every threshold sklearn has produced here is already a float32 value
+    widened to a double, because the features it bins are float32, so the
+    narrowing is a change of storage and not of the model: rhythm.cpp compares
+    a double against it, which widens it straight back to the number it came
+    from, and the walk branches where it always branched.
+
+    A refit that broke that would move a split by half an ulp, which reads as a
+    slightly different answer on a handful of tracks rather than as a failure -
+    the same kind of quiet wrongness SHORT_MAX is here to stop. Whoever refits
+    can decide the half-ulp does not matter and say so here; it is not a
+    decision to make silently on their behalf.
+    """
+    out = []
+    for i, v in enumerate(values):
+        f = _as_float32(v)
+        if f != v:
+            raise ValueError(
+                '%s[%d] = %r is not a float; storing it as one would move the '
+                'model. See _narrow() in %s.' % (what, i, v, __file__))
+        out.append(f)
+    return out
+
+
 def split_layout(flat, offsets):
     """Pull `flat` apart into splits and leaves.
 
     A split reads a feature, a threshold and two children; a leaf reads only a
     value. Holding both in one struct left one of the two doubles unread in
     every single node - and two bytes of padding in each besides, three shorts
-    before a double rounding up to 24. Apart, the same trees take 240,000 bytes
+    before a double rounding up to 24. Apart, and with the thresholds stored at
+    the width sklearn actually chose them at, the same trees take 198,000 bytes
     rather than 522,000, and nothing about them changes.
 
     A child reference is a split index when it is >= 0, and the leaf -1 - c when
@@ -72,7 +105,8 @@ def split_layout(flat, offsets):
                          'the header stores' % (len(feature), len(value)))
 
     return {'tree_root': tree_root, 'split_feature': feature,
-            'split_threshold': threshold, 'split_left': left,
+            'split_threshold': _narrow(threshold, 'split_threshold'),
+            'split_left': left,
             'split_right': right, 'leaf_value': value}
 
 
@@ -96,6 +130,24 @@ def walk(layout, targets, baseline, x):
     return s
 
 
+def _float32_literal(v):
+    """The shortest literal that reads back as this float, with the f suffix.
+
+    The suffix is not decoration. Without it the literal is a double, and a
+    double that is not exactly a float narrows in a braced initialiser, which
+    C++ makes ill-formed - the shortest spelling of a float rarely is one
+    exactly, 0.1f being the standard example.
+    """
+    for digits in range(1, 10):   # 9 always round-trips a float32
+        s = '%.*g' % (digits, v)
+        if _as_float32(float(s)) == v:
+            break
+    # '1f' is not a literal; '1.f' is. An exponent already makes it a real.
+    if '.' not in s and 'e' not in s and 'E' not in s:
+        s += '.'
+    return s + 'f'
+
+
 def _rows(values, per, render):
     for i in range(0, len(values), per):
         yield '\t\t' + ', '.join(render(v) for v in values[i:i + per])
@@ -116,11 +168,11 @@ def emit(layout, targets, baseline, class_names, track_count, feature_count):
     n_leaf = len(layout['leaf_value'])
     n_tree = len(layout['tree_root'])
 
-    # repr round-trips a double through the shortest string that reads back as
+    # Both renderers round-trip through the shortest string that reads back as
     # the same bits, which is what keeps a regenerated header identical to the
-    # one it replaced. It would render an infinity as 'inf', which C++ will not
-    # parse; sklearn does not produce one here, and if that ever changes this
-    # should stop rather than emit a file that does not compile.
+    # one it replaced. Either would render an infinity as 'inf', which C++ will
+    # not parse; sklearn does not produce one here, and if that ever changes
+    # this should stop rather than emit a file that does not compile.
     for v in layout['split_threshold'] + layout['leaf_value'] + list(baseline):
         if v != v or v in (float('inf'), float('-inf')):
             raise ValueError('cannot render %r as a C++ literal' % v)
@@ -143,7 +195,7 @@ def emit(layout, targets, baseline, class_names, track_count, feature_count):
     b.append('// Splits and leaves are held apart. A split reads a feature, a threshold and')
     b.append('// two children; a leaf reads only a value. One struct carrying both left one')
     b.append('// of the two doubles unread in every node, and two bytes of padding besides,')
-    b.append('// which cost 522,000 bytes for what fits in 240,000.')
+    b.append('// which cost 522,000 bytes for what fits in 198,000.')
     b.append('//')
     b.append('// A child reference is a split index when it is >= 0, and the leaf -1 - c when')
     b.append('// it is negative. tree_root uses the same encoding, so a tree that is a bare')
@@ -166,6 +218,7 @@ def emit(layout, targets, baseline, class_names, track_count, feature_count):
     short = lambda v: '%d' % v
     # See the note above on repr; '%r' is the same thing for a float.
     real = lambda v: '%r' % v
+    real32 = _float32_literal
 
     b.append('\t//! Where each tree starts, encoded as a child reference.')
     _array(b, 'short', 'tree_root', layout['tree_root'], 16, short)
@@ -173,10 +226,11 @@ def emit(layout, targets, baseline, class_names, track_count, feature_count):
     _array(b, 'short', 'tree_target', list(targets), 32, short)
     b.append('\t//! The feature a split compares, and what it compares it against.')
     _array(b, 'short', 'split_feature', layout['split_feature'], 16, short)
-    b.append('\t//! double so the walk branches exactly where scikit-learn branched:')
-    b.append('\t//! rounding a threshold to float can send a feature down the other')
-    b.append('\t//! side of a split.')
-    _array(b, 'double', 'split_threshold', layout['split_threshold'], 4, real)
+    b.append('\t//! float because that is the width scikit-learn chose these at - it bins')
+    b.append('\t//! float32 features - so every one of them widens back to the number the')
+    b.append('\t//! fit produced, and the walk below branches where the fit branched. The')
+    b.append('\t//! generator refuses to narrow a threshold that would not survive it.')
+    _array(b, 'float', 'split_threshold', layout['split_threshold'], 6, real32)
     b.append('\t//! Where a split goes, by the encoding above.')
     _array(b, 'short', 'split_left', layout['split_left'], 16, short)
     _array(b, 'short', 'split_right', layout['split_right'], 16, short)

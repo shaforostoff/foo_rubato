@@ -59,6 +59,14 @@ Change Log
   DLL, and there are none in the macOS component - its windows are built in
   code, where a label that does not fit is a layout constraint rather than a
   resource. The other five harnesses run on both.
+* Every binary is 42,000 bytes smaller, and not a split in the rhythm model
+  moves. Its thresholds were stored as `double` but chosen as `float` -
+  scikit-learn bins `float32` features, so all 10,500 of them were float values
+  widened - and `classify` compares a `double` feature against one, which
+  widens it straight back to the number the fit produced. The header stores
+  them at the width they were chosen at now, and the generator refuses to
+  narrow a threshold that a later refit has moved off that grid rather than
+  shipping a model that is quietly half an ulp different.
 * **Reggae is a fifth rhythm**, beside Tango, Vals and Milonga. It is there for
   the tempo rather than for the label: what a dancer taps in a reggae is the
   quarter note, and what the grid returns is usually the skank an octave above
