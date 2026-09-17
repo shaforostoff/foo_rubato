@@ -53,6 +53,24 @@ def _narrow(values, what):
     return out
 
 
+def _round(values):
+    """`values` as float32, rounding whatever does not already fit.
+
+    Leaf values are not float32 to begin with - they are sums of gradients, not
+    boundaries between two feature values - so unlike a threshold this really
+    does round, by up to half an ulp each. What it costs is bounded and small:
+    a class score is the sum of one leaf per tree targeting it, 150 of the 750
+    here, so the score moves by at most 150 half-ulps. On this fit that is
+    3.8e-06 worst case against scores of order one, and the argmax would have
+    to be deciding between two classes that close to notice. train_rhythm_model
+    computes that bound from the model itself and checks the walk against it.
+
+    A threshold gets _narrow instead, because there the rounding would move
+    where the trees branch rather than what they add up to.
+    """
+    return [_as_float32(v) for v in values]
+
+
 def split_layout(flat, offsets):
     """Pull `flat` apart into splits and leaves.
 
@@ -107,7 +125,26 @@ def split_layout(flat, offsets):
     return {'tree_root': tree_root, 'split_feature': feature,
             'split_threshold': _narrow(threshold, 'split_threshold'),
             'split_left': left,
-            'split_right': right, 'leaf_value': value}
+            'split_right': right, 'leaf_value': _round(value)}
+
+
+def leaf_slack(layout, targets):
+    """How far `walk` can land from the same trees walked at full precision.
+
+    A score is the baseline plus one leaf per tree targeting that class,
+    accumulated in double, so the only error is the leaves' own: at most half
+    an ulp each, which for a float of magnitude m is m * 2**-24. The bound is
+    that times the most trees any one class is fed by.
+
+    It is computed from the shipped values rather than written down, so that a
+    refit with more trees or larger leaves widens it by itself instead of
+    quietly overrunning a constant.
+    """
+    per_class = {}
+    for t in targets:
+        per_class[t] = per_class.get(t, 0) + 1
+    worst = max(abs(v) for v in layout['leaf_value']) * 2.0 ** -24
+    return max(per_class.values()) * worst
 
 
 def walk(layout, targets, baseline, x):
@@ -168,9 +205,9 @@ def emit(layout, targets, baseline, class_names, track_count, feature_count):
     n_leaf = len(layout['leaf_value'])
     n_tree = len(layout['tree_root'])
 
-    # Both renderers round-trip through the shortest string that reads back as
-    # the same bits, which is what keeps a regenerated header identical to the
-    # one it replaced. Either would render an infinity as 'inf', which C++ will
+    # _float32_literal round-trips through the shortest string that reads back
+    # as the same float, which is what keeps a regenerated header identical to
+    # the one it replaced. It would render an infinity as 'inf', which C++ will
     # not parse; sklearn does not produce one here, and if that ever changes
     # this should stop rather than emit a file that does not compile.
     for v in layout['split_threshold'] + layout['leaf_value'] + list(baseline):
@@ -195,7 +232,7 @@ def emit(layout, targets, baseline, class_names, track_count, feature_count):
     b.append('// Splits and leaves are held apart. A split reads a feature, a threshold and')
     b.append('// two children; a leaf reads only a value. One struct carrying both left one')
     b.append('// of the two doubles unread in every node, and two bytes of padding besides,')
-    b.append('// which cost 522,000 bytes for what fits in 198,000.')
+    b.append('// which cost 522,000 bytes for what fits in 153,000.')
     b.append('//')
     b.append('// A child reference is a split index when it is >= 0, and the leaf -1 - c when')
     b.append('// it is negative. tree_root uses the same encoding, so a tree that is a bare')
@@ -216,8 +253,6 @@ def emit(layout, targets, baseline, class_names, track_count, feature_count):
     b.append('')
 
     short = lambda v: '%d' % v
-    # See the note above on repr; '%r' is the same thing for a float.
-    real = lambda v: '%r' % v
     real32 = _float32_literal
 
     b.append('\t//! Where each tree starts, encoded as a child reference.')
@@ -235,7 +270,9 @@ def emit(layout, targets, baseline, class_names, track_count, feature_count):
     _array(b, 'short', 'split_left', layout['split_left'], 16, short)
     _array(b, 'short', 'split_right', layout['split_right'], 16, short)
     b.append('\t//! What a leaf adds to its tree\'s class.')
-    _array(b, 'double', 'leaf_value', layout['leaf_value'], 4, real)
+    b.append('\t//! float: a score is one of these per tree and is accumulated in double,')
+    b.append('\t//! so the width here costs half an ulp per tree rather than compounding.')
+    _array(b, 'float', 'leaf_value', layout['leaf_value'], 6, real32)
 
     b[-1] = '}   // namespace rhythm_model'
     b.append('}   // namespace bpmcore')

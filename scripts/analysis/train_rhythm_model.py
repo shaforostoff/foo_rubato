@@ -83,12 +83,18 @@ def main():
         mine = walk(flat, offsets, targets, baseline, X[i], n_cls)
         worst = max(worst, float(np.max(np.abs(np.array(mine) - ref[j]))))
         split = H.walk(layout, targets, baseline, X[i])
-        # The same doubles compared in the same order, so these agree exactly
-        # rather than closely. Anything else is a bug in the layout.
         worst_split = max(worst_split, max(abs(a - b) for a, b in zip(split, mine)))
+    # The split layout branches on the same thresholds - those narrow to float
+    # exactly or the layout refuses to build - but its leaves are float, so it
+    # lands near the flat trees rather than on them. Near enough is defined by
+    # the model and not by a number typed in here: see H.leaf_slack.
+    slack = H.leaf_slack(layout, targets)
     print(f'max |mine - sklearn decision_function| over 400 tracks = {worst:.3e}')
+    print(f'max |split layout - flat trees| = {worst_split:.3e}, bound {slack:.3e}')
     assert worst < 1e-6, 'exported trees do not reproduce the model'
-    assert worst_split == 0.0, f'the split layout walks to different scores ({worst_split})'
+    assert worst_split <= slack, (f'the split layout walks further from the flat trees '
+                                  f'({worst_split}) than storing the leaves as float can '
+                                  f'account for ({slack})')
 
     with open(OUT, 'w', encoding='utf-8') as fh:
         fh.write(H.emit(layout, targets, baseline, CLS, X.shape[0], X.shape[1]))
