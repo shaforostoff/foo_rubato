@@ -1,12 +1,11 @@
 Rubato BPM Analyzer for foobar2000
 ==================================
 
-Detects the tempo of a track and which of Tango, Vals, Milonga it is
-- or none of the three - from the audio alone, without reading the genre tag.
+Detects the tempo of a track and which of Tango, Vals, Milonga it is - or none of the three - from the audio alone, without reading the genre tag.
 
 The two answers are linked. The tempo a dancer taps is not a property of the
-audio by itself: a tango is tapped on the beat, a vals once per 3/4 bar, a
-milonga once per 2/4 bar, a reggae on the quarter note - under the skank rather
+audio by itself: a tango is tapped on the beat, a vals once per 3/4 bar,
+a milonga once per 2/4 bar, a reggae on the quarter note - under the skank rather
 than on it. So the rhythm is settled first and the tempo reported on the level
 that rhythm implies. Measured against 3,692 hand-tapped tracks the estimate
 lands within 2 BPM of the tap 88.7% of the time, which is about as close as the
@@ -18,6 +17,7 @@ the cortina genres that were measured and left alone.
 Originally written by Michael Balzer+Holger Stenger as BPM Analyser,
 but bpmcore engine was completely rewritten.
 
+![Rubato BPM Analysis](/screenshot.png?raw=true)
 
 Building
 --------
