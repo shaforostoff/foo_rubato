@@ -573,6 +573,49 @@ the result, where a float FFT accumulates over all its stages — but it means
 the width the features arrive at was never the double one.
 
 
+### What the magnitude loop costs at float
+
+The width above is the transform's. The loop that turns its output into the
+feature - a magnitude and a compressed logarithm per bin, per frame - is a
+separate question, because it runs at whatever width its own arithmetic is
+written in whatever the transform did. It was left at double when the transform
+question was settled, and it is the largest single cost in the analysis, so it
+was asked again on its own terms.
+
+`logf` and `sqrtf` are about a third cheaper than their double counterparts.
+Narrowing the two of them, and the magnitude they consume, leaves the
+difference that follows at double so that the subtraction between frames stays
+exact.
+
+Measured the same way, as the second of two changes over the full collection
+(`bt_acf.exe` against `bt_log.exe`, everything else identical). Over **12,159
+tracks analysed by both**, nothing moved:
+
+| | |
+|---|---|
+| metrical level flipped | 0 |
+| meter changed | 0 |
+| rhythm class changed | 0 |
+| BPM \|delta\|, median / p99 / max | 0.000000 / 0.000006 / 0.000453 |
+| confidence \|delta\|, median / p99 / max | 0.000000 / 0.000000 / 0.003553 |
+
+Against the hand taps both read 37.84% exact, 90.03% within 2 BPM and 97.75%
+right level, with not one tapped track landing closer to its tap or further
+from it.
+
+That is a quieter result than the transform's own narrowing, which is what it
+should be: the largest disagreement there was 0.056 BPM and a confidence that
+moved 0.198 on one Canaro side, where here the largest is 0.0005 BPM and 0.004.
+A rounding applied once to a magnitude perturbs less than one accumulated
+through every stage of a transform.
+
+There is also a reason to expect it rather than merely to find it. The
+reference pipeline the model was fitted with computes this same loop at float32
+already - `stft_mag` in `scripts/analysis/odf.py` rounds each magnitude to
+float32, and the `np.log1p` that follows stays there. Double was the wider of
+the two, not the truer one; this narrowing moves bpmcore towards the arithmetic
+the trees were trained on rather than away from it.
+
 ### Swapping the transform for PFFFT
 
 With the width settled, the library was the remaining question, and it is a

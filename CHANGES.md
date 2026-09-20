@@ -44,9 +44,9 @@ Change Log
   per-year priors are measured from 281 dated sides. Nothing is suggested for
   a track with no year or one recorded from 1976 on.
 
-* Detection costs about as much again as the tempo analysis - a 196-second
-  side goes from 2400x realtime to 1200x on one thread - which is still a
-  small fraction of what decoding it costs. It can be switched off on the
+* Detection costs more than the tempo analysis itself - a 196-second side goes
+  from 3200x realtime to 1300x on one thread - which is still a small fraction
+  of what decoding it costs. It can be switched off on the
   preferences page, along with each of the three groups of fields separately.
 
 * `bpm_track_result` replaces the parallel arrays the results window and the
@@ -101,6 +101,21 @@ Change Log
   Reassociating a sum can change its last bits, so this was not argued from the
   source but run: over all 12,163 tracks the output is byte for byte what it
   was.
+
+* **The onset envelope forms its magnitudes at single precision**, a further
+  8.6% at 22.05kHz and 7.1% at 44.1kHz - and with the sums above, 13% and 10%.
+  `logf` and `sqrtf` are about a third cheaper than the double versions, and
+  this is the largest single loop in the analysis. What comes out is kept as
+  double, so the difference between frames that the detector actually runs on
+  is unchanged.
+
+  This one does move the last digits, so it was measured rather than counted
+  exact: over the same 12,163 tracks not one changed rhythm, meter or metrical
+  level, the largest tempo difference anywhere was 0.0005 BPM, and the 3,692
+  hand taps score the same to two decimals. The model was fitted on float32
+  magnitudes to begin with - `stft_mag` in `scripts/analysis/odf.py` - so this
+  narrows towards the arithmetic the trees were trained on rather than away
+  from it. `docs/tango-analysis.md` carries the run.
 
 * **A row of results explains itself on hover.** The Tuning column has room
   for a number and the window has room for the column, so what makes the number
