@@ -1,6 +1,7 @@
 #ifndef __DPM_RESULT_DIALOG_H__
 #define __DPM_RESULT_DIALOG_H__
 
+#include <string>
 #include <vector>
 
 #include <SDK/foobar2000.h>
@@ -22,6 +23,7 @@ public:
 		COMMAND_HANDLER_EX(ID_DOUBLE_BPM_BUTTON, BN_CLICKED, OnDoubleBPMClicked)
 		COMMAND_HANDLER_EX(ID_HALVE_BPM_BUTTON, BN_CLICKED, OnHalveBPMClicked)
 		NOTIFY_HANDLER_EX(ID_BPM_RESULT_LIST, LVN_ITEMCHANGED, OnItemChanged)
+		NOTIFY_CODE_HANDLER_EX(TTN_GETDISPINFO, OnTipDispInfo)
 		MSG_WM_CLOSE(OnClose);
 	END_MSG_MAP()
 
@@ -38,12 +40,22 @@ private:
 	LRESULT OnHalveBPMClicked(UINT uNotifyCode, int nID, CWindow wndCtl);
 
 	LRESULT OnItemChanged(LPNMHDR pnmh);
+	//! Hands the tooltip the text for the row the pointer is on.
+	LRESULT OnTipDispInfo(LPNMHDR pnmh);
 
 	void OnClose();
 	// Override the parent method for when the dialog is destroyed so we can delete its memory
 	void PostNcDestroy();
 
 	bool pretranslate_message(MSG *p_msg);
+
+	//! The row tooltip: one of this window's own, because the list view will
+	//! not offer one where it is wanted. See bpm_result_dialog.cpp.
+	void CreateRowTooltip(CListViewCtrl & result_list);
+	void RelayToTooltip(MSG * p_msg);
+	void SetTooltipRow(CListViewCtrl & result_list, int row);
+	//! Whether column 0 is drawing `title` cut short.
+	bool TitleIsClipped(CListViewCtrl & result_list, const TCHAR * title);
 
 	void EnableScaleBPMButtons();
 	void ScaleSelectionBPM(double p_factor);
@@ -64,6 +76,12 @@ private:
 	//! key detection is switched off in the preferences.
 	int m_col_key = -1;
 	int m_col_tuning = -1;
+
+	CToolTipCtrl m_tips;
+	//! The row m_tip_text was built for, -1 for none. The text is a member
+	//! because the tooltip is given a pointer to it rather than a copy.
+	int m_tip_row = -1;
+	std::wstring m_tip_text;
 
 	metadb_handle_list m_tracks;
 	pfc::list_t<file_info_impl> m_infos;

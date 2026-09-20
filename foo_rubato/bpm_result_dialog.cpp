@@ -94,6 +94,7 @@ LRESULT bpm_result_dialog::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	//	 listview_helper::insert_column(result_list, col++, "BPM (Alt)", 50);
 
 		result_list.SetExtendedListViewStyle(LVS_EX_GRIDLINES | LVS_EX_FULLROWSELECT);// | LVS_EX_CHECKBOXES);
+		CreateRowTooltip(result_list);
 
 		string title_column;
 
@@ -198,6 +199,8 @@ bool bpm_result_dialog::pretranslate_message(MSG *p_msg)
 {
 	if (m_hWnd != NULL)
 	{
+		RelayToTooltip(p_msg);
+
 		if (IsDialogMessage(p_msg))
 		{
 			return true;
@@ -205,6 +208,167 @@ bool bpm_result_dialog::pretranslate_message(MSG *p_msg)
 	}
 
 	return false;
+}
+
+//! Bare newlines, which is what bpm_key_format.h writes, into the CRLF a Win32
+//! tooltip needs before it will draw a second line at all.
+//!
+//! The conversion lives here rather than in the formatter because the formatter
+//! is shared with the Cocoa window, which wants the bare ones, and with
+//! foo_rubato_test, which builds without a host at all.
+static pfc::string8 bpm_tooltip_crlf(const pfc::string8 & in)
+{
+	pfc::string8 out;
+	for (const char * p = in.get_ptr(); *p != '\0'; p++)
+	{
+		if (*p == '\n') out.add_string("\r\n", 2);
+		else out.add_byte(*p);
+	}
+	return out;
+}
+
+//! A tooltip belonging to this window, covering the whole list.
+//!
+//! The control has one of its own, and LVS_EX_INFOTIP will even route it
+//! through LVN_GETINFOTIP, but in report mode the tooltip it offers belongs to
+//! the item rather than to the cell, and that route showed nothing at all over
+//! the tuning column. This one is filled in and shown by hand, off the mouse
+//! messages pretranslate_message already sees - which also means it can be
+//! watched from outside a host, and was.
+//!
+//! The control's own tooltip goes, rather than sitting alongside: it draws the
+//! truncated title over column 0 and would pop on top of this one. What it did
+//! is folded into the row text instead, which is what TitleIsClipped is for. It
+//! is not destroyed here - it is a popup owned by the list view, so it goes
+//! when the list does.
+void bpm_result_dialog::CreateRowTooltip(CListViewCtrl & result_list)
+{
+	ListView_SetToolTips(result_list.m_hWnd, NULL);
+
+	if (m_tips.Create(m_hWnd, NULL, NULL,
+	                  WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP) == NULL) return;
+
+	// TTS_NOPREFIX because titles contain ampersands and an ampersand in a
+	// tooltip is otherwise eaten as an accelerator.
+	//
+	// The text is left to a callback rather than handed over now. A tooltip
+	// stores 80 characters for a tool and these run to several hundred, so
+	// what it gets is a pointer into m_tip_text, refreshed every time it asks.
+	//
+	// The two window handles are not the same window and the difference is the
+	// whole thing: uId is what the pointer has to be over, and hwnd is who gets
+	// asked for the text. Naming the list for both looks right, costs no error,
+	// and silently sends TTN_GETDISPINFO to a control that does not answer it -
+	// leaving the tooltip with nothing to draw and nothing drawn.
+	CToolInfo tool(TTF_IDISHWND, m_hWnd,
+	               reinterpret_cast<UINT_PTR>(result_list.m_hWnd), NULL,
+	               LPSTR_TEXTCALLBACK);
+	m_tips.AddTool(&tool);
+
+	// A tooltip with no maximum width is a single line whatever it is given:
+	// the CRLFs are drawn as spaces and nothing wraps. Asking for a width is
+	// what makes it a paragraph, and 380 units is about sixty characters of
+	// the dialog's own face.
+	m_tips.SetMaxTipWidth(380);
+	// Five seconds is the default and is not long enough to read a paragraph
+	// of this length; it stays up until the pointer moves off the row.
+	m_tips.SetDelayTime(TTDT_AUTOPOP, 30000);
+	// Nothing to say until the pointer is over a row worth saying it for.
+	m_tips.Activate(FALSE);
+}
+
+//! The tooltip's eyes. It has no hook into the message stream of its own -
+//! TTF_SUBCLASS would give it one, but subclassing the list view to get it
+//! would be a larger thing than this - so the mouse messages bound for the
+//! list are handed over here, and the row under the pointer settled on the way
+//! past.
+void bpm_result_dialog::RelayToTooltip(MSG * p_msg)
+{
+	if (m_tips.m_hWnd == NULL) return;
+	switch (p_msg->message)
+	{
+	case WM_MOUSEMOVE:
+	case WM_LBUTTONDOWN: case WM_LBUTTONUP:
+	case WM_RBUTTONDOWN: case WM_RBUTTONUP:
+	case WM_MBUTTONDOWN: case WM_MBUTTONUP:
+		break;
+	default:
+		return;
+	}
+
+	CListViewCtrl result_list = GetDlgItem(ID_BPM_RESULT_LIST);
+	if (result_list.m_hWnd == NULL || p_msg->hwnd != result_list.m_hWnd) return;
+
+	if (p_msg->message == WM_MOUSEMOVE)
+	{
+		// The message carries the point, which is the one the tooltip is about
+		// to be shown for; the cursor may already have moved on by now.
+		LVHITTESTINFO hit = {};
+		hit.pt.x = static_cast<short>(LOWORD(p_msg->lParam));
+		hit.pt.y = static_cast<short>(HIWORD(p_msg->lParam));
+		result_list.HitTest(&hit);
+		SetTooltipRow(result_list, hit.iItem);
+	}
+	// After the text, so that the move which changed the row is also the move
+	// that starts the delay the new text will appear after.
+	m_tips.RelayEvent(p_msg);
+}
+
+//! Build the text for a row, or take the tooltip away where there is none.
+void bpm_result_dialog::SetTooltipRow(CListViewCtrl & result_list, int row)
+{
+	if (row == m_tip_row) return;
+	m_tip_row = row;
+
+	pfc::string8 text;
+	if (row >= 0 && static_cast<std::size_t>(row) < m_results.size())
+	{
+		// Read back off the control rather than rebuilt from m_infos, so that
+		// the tooltip cannot name the row differently from the row.
+		TCHAR title[512] = {};
+		result_list.GetItemText(row, 0, title, static_cast<int>(std::size(title)));
+		const bpm_track_result & r = m_results[row];
+		text = bpm_format_row_tooltip(
+			pfc::stringcvt::string_utf8_from_wide(title),
+			TitleIsClipped(result_list, title), r.key, r.year);
+	}
+
+	if (text.is_empty())
+	{
+		// Nothing to say is said by not appearing at all, rather than by an
+		// empty box following the pointer down the list.
+		m_tip_text.clear();
+		m_tips.Activate(FALSE);
+		return;
+	}
+
+	m_tip_text = pfc::stringcvt::string_wide_from_utf8(bpm_tooltip_crlf(text)).get_ptr();
+	m_tips.Activate(TRUE);
+	// Anything on screen at this point belongs to the row just left.
+	m_tips.Pop();
+}
+
+//! Whether column 0 is drawing the title cut short, which is the one case
+//! where repeating it in the tooltip tells the reader something they cannot
+//! already see.
+bool bpm_result_dialog::TitleIsClipped(CListViewCtrl & result_list, const TCHAR * title)
+{
+	// The same allowance the columns are sized with: GetStringWidth measures
+	// the glyphs, and the cell draws a margin either side of them.
+	const int padding = 14;
+	return result_list.GetStringWidth(title) + padding > result_list.GetColumnWidth(0);
+}
+
+LRESULT bpm_result_dialog::OnTipDispInfo(LPNMHDR pnmh)
+{
+	NMTTDISPINFO * const info = reinterpret_cast<NMTTDISPINFO *>(pnmh);
+	info->szText[0] = 0;
+	info->hinst = NULL;
+	// Pointed at the member rather than copied into the notification's own
+	// buffer, which holds 80 characters. It has to outlive this call, which is
+	// the whole reason the text is built when the row changes and not here.
+	info->lpszText = m_tip_text.empty() ? NULL : const_cast<LPTSTR>(m_tip_text.c_str());
+	return 0;
 }
 
 void bpm_result_dialog::EnableScaleBPMButtons()

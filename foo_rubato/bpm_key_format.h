@@ -141,6 +141,110 @@ inline pfc::string8 bpm_format_key_column(const bpmcore::key_analysis & key)
 	return out;
 }
 
+//! What the tuning column says when the pointer rests on it.
+//!
+//! The column has room for a number and the window has room for the column, so
+//! everything that makes the number actionable has to live somewhere else:
+//! which reference pitch, in which direction, by how much, and why there is
+//! more than one answer. Nothing here is a new measurement - `suggest_retune`
+//! ranks the same candidates that reach the RETUNE tags - it is the same
+//! answer written out at the length it needs.
+//!
+//! Lines are separated with a bare newline. A Win32 tooltip wants CRLF and
+//! this header has no business knowing that, so bpm_result_dialog converts on
+//! its way out; Cocoa takes it as it is.
+inline pfc::string8 bpm_format_tuning_tooltip(const bpmcore::key_analysis & key, int year)
+{
+	pfc::string8 out;
+	if (!key.ok) return out;
+
+	if (!key.tuning_ok)
+	{
+		out << "No steady pitch was found in this track, so its tuning was not "
+		       "measured. A spoken introduction, a run of applause, or surface "
+		       "noise on its own all look like this from here.";
+		return out;
+	}
+
+	out << "Tuning is " << bpm_format_signed(key.tuning_cents, 1)
+	    << " cents from A=440, and known only to within a semitone.";
+	if (key.near_wrap)
+		out << "\nThis one sits within 5 cents of the semitone wrap, so the key "
+		       "beside it may be a semitone out.";
+
+	enum { max_options = 4 };
+	bpmcore::retune_option opt[max_options];
+	const int n = bpmcore::suggest_retune(key.tuning_cents, year, opt, max_options);
+	if (n < 1)
+	{
+		out << "\n\n";
+		if (year <= 0)
+			out << "This file carries no recording year, so there is no pitch to "
+			       "correct towards - the offset is the same whether the side was "
+			       "cut at A=435 or the transfer simply runs fast. Set ORIGINALDATE "
+			       "or DATE and scan it again.";
+		else
+			out << "Recorded " << year << ", by which time sides were cut at A=440 "
+			       "alone, so an offset this size belongs to the transfer rather "
+			       "than to a pitch standard.";
+		return out;
+	}
+
+	out << "\n";
+	for (int i = 0; i < n; i++)
+		out << "\n    " << bpm_format_signed(opt[i].percent, 2) << "%  to "
+		    << bpmcore::retune_target_name(opt[i].target);
+
+	out << "\n\nA plus means play it faster.";
+	if (n > 1)
+	{
+		// Why there is more than one, and no more history than the era table
+		// actually carries. "Both were in use in 1935" would be wrong - they
+		// were not, and A=440 is on the list because the prior leaves it a
+		// quarter rather than because anyone used it. That both are in range,
+		// and that the order is the year's opinion, is true of every year.
+		bool wrapped = false, both_pitches = false;
+		for (int i = 0; i < n; i++)
+			for (int j = i + 1; j < n; j++)
+			{
+				if (opt[i].target == opt[j].target) wrapped = true;
+				else both_pitches = true;
+			}
+		out << " More than one fits the same measurement";
+		if (wrapped) out << ": the offset cannot tell a semitone apart";
+		if (wrapped && both_pitches) out << ", and ";
+		else if (both_pitches) out << ": ";
+		if (both_pitches) out << "both reference pitches are in range for " << year;
+		out << ". They are in the order that year makes likely.";
+	}
+	return out;
+}
+
+//! What the pointer resting anywhere on a row of results says.
+//!
+//! The whole row rather than the tuning cell alone, because a report-mode list
+//! view offers its tooltip by item and not by cell: hovering a column on the
+//! right of the row produced nothing at all, which is exactly what the tuning
+//! column is, and is why the first attempt at this never appeared.
+//!
+//! `clipped` says the title column is drawing the title cut short. A title
+//! with nothing to follow it is worth repeating only then - otherwise the
+//! tooltip would say back what is already on screen, on every row, forever.
+inline pfc::string8 bpm_format_row_tooltip(const char * title, bool clipped,
+                                           const bpmcore::key_analysis & key, int year)
+{
+	const pfc::string8 tuning = bpm_format_tuning_tooltip(key, year);
+	pfc::string8 out;
+	if (tuning.is_empty() && !clipped) return out;
+	if (title != NULL && *title != '\0')
+	{
+		out << title;
+		if (!tuning.is_empty()) out << "\n\n";
+	}
+	out << tuning;
+	return out;
+}
+
 //! The tuning column: cents, and a mark where the value is not to be trusted.
 inline pfc::string8 bpm_format_tuning_column(const bpmcore::key_analysis & key)
 {

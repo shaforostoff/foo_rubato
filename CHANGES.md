@@ -90,6 +90,21 @@ Change Log
   copying them and then reading its own copy. On a long side that is a
   megabyte that was live twice for no reason.
 
+* **A row of results explains itself on hover.** The Tuning column has room
+  for a number and the window has room for the column, so what makes the number
+  actionable had nowhere to go: which reference pitch, in which direction, by
+  how much, and why there is more than one answer. Resting the pointer anywhere
+  on the row now gives all four - the same corrections that reach the RETUNE
+  tags, ranked the same way, so a side from the 1939-1944 transition shows both
+  A=435 and A=440 with the era's own order. A title the column cut short is
+  shown in full above it.
+
+  It also says what it cannot do. A file with no recording year gets the
+  measurement and an explanation of why no correction follows from it; a track
+  whose pitch never settled says so rather than showing a number nobody should
+  act on; and an offset near the semitone wrap carries the warning that the key
+  beside it may be a semitone out.
+
 * **The component ships on PFFFT at single precision** rather than KISS FFT at
   double. The transform is about six times faster at the sizes used here, and
   on a 196-second side that is 0.163s against 0.261s for a whole analysis on

@@ -339,6 +339,27 @@ static NSMutableArray<fooRubatoResultsWindow *> * g_openWindows = nil;
 	return @"";
 }
 
+//! The whole row's explanation, on every cell of the row.
+//!
+//! A cell here could carry its own - AppKit has no trouble telling them apart,
+//! unlike a Win32 list view - but the two windows would then say different
+//! things in the same place, and there is only one thing to say.
+- (NSString *)tooltipForRow:(NSInteger)row
+{
+	const results_model & model = *_model;
+	const std::size_t index = (std::size_t) row;
+	if (index >= model.results.size()) return nil;
+
+	const bpm_track_result & r = model.results[index];
+	const pfc::string8 title = [self textForRow:row column:col_title].UTF8String;
+	// `clipped` is false: a table cell here truncates with an ellipsis and
+	// nothing measures that, so the title rides along only where there is a
+	// paragraph for it to introduce.
+	const pfc::string8 text = bpm_format_row_tooltip(title, false, r.key, r.year);
+	// An empty tooltip would still put an empty box under the pointer.
+	return text.is_empty() ? nil : fooRubatoStr(text.get_ptr());
+}
+
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView
 {
 	return (NSInteger) _model->results.size();
@@ -356,6 +377,11 @@ static NSMutableArray<fooRubatoResultsWindow *> * g_openWindows = nil;
 		cell.lineBreakMode = NSLineBreakByTruncatingTail;
 	}
 	cell.stringValue = [self textForRow:row column:tableColumn.identifier];
+	// The tuning column carries a number the column has no room to explain -
+	// which reference pitch, in which direction, by how much, and why there is
+	// more than one answer. The pointer resting on the row is where that goes.
+	// Cells are recycled, so this is cleared as deliberately as it is set.
+	cell.toolTip = [self tooltipForRow:row];
 	return cell;
 }
 
