@@ -90,6 +90,18 @@ Change Log
   copying them and then reading its own copy. On a long side that is a
   megabyte that was live twice for no reason.
 
+* **The autocorrelation carries four running sums instead of one**, which is
+  4.7% off the whole analysis at 22.05kHz and 2.8% at 44.1kHz. A single total
+  is a chain of additions each waiting on the one before it, and no compiler may
+  reorder a floating-point sum to break that chain, so the vector unit idles
+  through the densest loop in the tempo stage. Four independent sums fill it,
+  and are as deterministic as one - which is what an answer that becomes a tag
+  depends on.
+
+  Reassociating a sum can change its last bits, so this was not argued from the
+  source but run: over all 12,163 tracks the output is byte for byte what it
+  was.
+
 * **A row of results explains itself on hover.** The Tuning column has room
   for a number and the window has room for the column, so what makes the number
   actionable had nowhere to go: which reference pitch, in which direction, by
