@@ -90,6 +90,26 @@ Change Log
   copying them and then reading its own copy. On a long side that is a
   megabyte that was live twice for no reason.
 
+* **The component ships on PFFFT at single precision** rather than KISS FFT at
+  double. The transform is about six times faster at the sizes used here, and
+  on a 196-second side that is 0.163s against 0.261s for a whole analysis on
+  one thread. The 64-bit DLL is 9KB smaller for it.
+
+  This was measured before and not taken: over the 12,157 tracks two builds
+  both analysed, not one changed its rhythm, its meter or its metrical level,
+  and tap accuracy came out identical to two decimals against 3,692 hand taps -
+  but a measurement showing nothing moved is not by itself a reason to move.
+  What changed is what the transform is a share of. With the three loops above
+  out of the way it is a larger fraction of a shorter run, so the same swap is
+  worth 1.60x where it used to be worth 1.42x.
+
+  KISS FFT is still vendored, still built, and still the oracle
+  `fft_backend_test` checks the shipping transform against - not a fallback.
+  `-Kiss` on Windows and `--kiss` on macOS build it, each into its own build
+  directory and its own archive name, as `-Pffft` and `--pffft` used to do for
+  the other one. `docs/tango-analysis.md` carries the evidence and the two
+  things the switch means.
+
 ### Version 0.1.0
 
 * **It runs on macOS.** `scripts/build_release_macos.sh` builds one universal

@@ -648,8 +648,33 @@ target. `fft_backend_test` prints `pffft_simd_size()` for that reason: a build
 that quietly lost its SIMD is six times slower than it was meant to be and says
 nothing about it.
 
-The default stays KISS at double. The component ships what it has always
-shipped, and the fast path is there for the build that needs it.
+**PFFFT at float is now the default**, and KISS at double is the reference
+build. When this was first written the default stayed where it had always been,
+on the reasoning that a measurement showing nothing moved is not by itself a
+reason to move. What changed is not the evidence but what the transform is a
+share of. The whitening median, the flux sums and the frame RMS have since been
+taken out of the way, so the transform is a larger fraction of what remains and
+the same swap now buys more of a shorter run: on a 196-second side at the model
+rate, one thread, 0.261s on KISS at double against 0.163s on PFFFT at float -
+**1.60x**, where before those three loops were fixed it was 1.42x. A dual-core
+2014 MacBook Air is the machine this has to feel quick on, and there that is
+the whole of the difference. It costs nothing in size either: the 64-bit DLL is
+about 9KB *smaller* on PFFFT.
+
+Two things the switch does mean, neither of them new but both now shipping:
+
+* **PFFFT's answer depends on the SIMD it found.** Its scalar fallback sums in
+  a different order from its SSE path, and NEON is a third. So the two slices
+  of the macOS universal bundle can differ in the last bits of a magnitude, as
+  can a machine whose build lost its SIMD. That is the same class of difference
+  `fft_backend_test` measures at 1.3e-7 relative, and it is far below anything
+  that reaches a printed figure - but it is why that test prints
+  `pffft_simd_size()`, and why an odd result on a new architecture is worth
+  checking there first.
+* **KISS is not a fallback, it is the oracle.** It stays vendored and built at
+  both widths for exactly that reason. `-Kiss` on Windows and `--kiss` on macOS
+  build the double reference, each into its own build directory and its own
+  archive name.
 
 
 Reproducing the model

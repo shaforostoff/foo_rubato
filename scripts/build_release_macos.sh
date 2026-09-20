@@ -44,11 +44,13 @@
 #     -m, --merge <archive> fold the macOS bundle into this existing
 #                           .fb2k-component, producing one archive that
 #                           installs on Windows and macOS alike.
-#         --pffft           build the spectral stage on PFFFT at single
-#                           precision instead of KISS FFT at double: faster,
-#                           and NOT what the component ships. Gets its own
-#                           build directory and its own archive name, so the
-#                           two can never be mistaken for one another.
+#         --kiss            build the spectral stage on KISS FFT at double
+#                           precision instead of PFFFT at single: the portable
+#                           reference the shipping transform is checked
+#                           against, slower, and NOT what the component ships.
+#                           Gets its own build directory and its own archive
+#                           name, so the two can never be mistaken for one
+#                           another.
 #         --skip-tests      do not run the verification harness. Not recommended.
 #         --clean           wipe the build directory first.
 #
@@ -80,7 +82,7 @@ configuration="Release"
 jobs=""
 sign_identity="-"
 merge_archive=""
-use_pffft=0
+use_kiss=0
 skip_tests=0
 clean=0
 
@@ -93,10 +95,14 @@ while [[ $# -gt 0 ]]; do
         -j|--jobs)    jobs="${2:-}"; shift 2 ;;
         -s|--sign)    sign_identity="${2:-}"; shift 2 ;;
         -m|--merge)   merge_archive="${2:-}"; shift 2 ;;
-        --pffft)      use_pffft=1; shift ;;
+        --kiss)       use_kiss=1; shift ;;
         --skip-tests) skip_tests=1; shift ;;
         --clean)      clean=1; shift ;;
-        -h|--help)    sed -n '2,70p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        # Every comment line down to the first that is not one, rather than a
+        # line range: the range was two lines short of the header the moment an
+        # option grew a line, and said nothing about it.
+        -h|--help)    awk 'NR==1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' \
+                          "${BASH_SOURCE[0]}"; exit 0 ;;
         *)            die "unknown option: $1" ;;
     esac
 done
@@ -161,12 +167,12 @@ echo "  jobs: $jobs"
 cmake_args=()
 suffix=""
 
-if [[ $use_pffft -eq 1 ]]; then
-    cmake_args+=(-DBPMCORE_FFT_BACKEND=pffft -DBPMCORE_FFT_SCALAR=float)
-    suffix="-pffft"
-    echo "  spectral stage: PFFFT, float - not the shipping configuration"
+if [[ $use_kiss -eq 1 ]]; then
+    cmake_args+=(-DBPMCORE_FFT_BACKEND=kiss -DBPMCORE_FFT_SCALAR=double)
+    suffix="-kiss"
+    echo "  spectral stage: KISS FFT, double - not the shipping configuration"
 else
-    echo "  spectral stage: KISS FFT, double"
+    echo "  spectral stage: PFFFT, float"
 fi
 
 build_dir="$root/build/mac${arch_tag:-"-universal"}$suffix"
@@ -298,8 +304,8 @@ EOF
 # A string rather than an array: /bin/bash on macOS is 3.2, where an empty
 # array counts as unset and `set -u` stops the script over it.
 notes=""
-if [[ $use_pffft -eq 1 ]]; then
-    notes="$notes It analyses with PFFFT at single precision rather than KISS at double."
+if [[ $use_kiss -eq 1 ]]; then
+    notes="$notes It analyses with KISS FFT at double precision rather than PFFFT at single."
 fi
 if [[ -n "$arch_tag" ]]; then
     notes="$notes It carries ${requested[0]} only, so it will not load on the other architecture."

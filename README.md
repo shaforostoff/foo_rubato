@@ -37,15 +37,16 @@ installs everywhere. Symbols are packaged separately as
 `dist\foo_rubato-<version>-symbols.zip`; keep them so crash reports can be
 resolved, but do not ship them.
 
-`-Pffft` builds the same component on the faster single-precision transform
-instead - about 1.7x on a whole analysis, and not what is shipped. `-Dynamic`
-links the C runtime as a DLL rather than statically, which is 209KB off each
-built DLL and 111KB off each packed, at the price of needing the Visual C++
-redistributable on the target machine.
+`-Kiss` builds the same component on the portable double-precision transform
+instead - the reference the shipping one is checked against, about 1.6x slower
+over a whole analysis, and not what is shipped. `-Dynamic` links the C runtime
+as a DLL rather than statically, which is 209KB off each built DLL and 111KB
+off each packed, at the price of needing the Visual C++ redistributable on the
+target machine.
 
 Neither is the release build. Each uses its own build directory and puts its own
-word in the archive name, and they compose - `-Pffft -Dynamic` writes
-`foo_rubato-<version>-pffft-dynamic.fb2k-component` - so no switched build can
+word in the archive name, and they compose - `-Kiss -Dynamic` writes
+`foo_rubato-<version>-kiss-dynamic.fb2k-component` - so no switched build can
 be mistaken for the shipping one. `cmake\fft_backend.cmake` and the
 `FOO_RUBATO_*` options are what sit underneath them.
 
@@ -101,8 +102,8 @@ code, and cross-building a universal binary does not sign it for you, so an
 unsigned bundle fails to load on half the machines it is meant for. Pass
 `-s "Developer ID Application: ..."` to use a real identity instead.
 
-`--pffft` builds the same component on the faster single-precision transform,
-as `-Pffft` does on Windows. There is no `--dynamic`: that selects between the
+`--kiss` builds the same component on the portable double-precision transform,
+as `-Kiss` does on Windows. There is no `--dynamic`: that selects between the
 static and DLL Visual C++ runtimes, and there is no such choice to make against
 the system libc++.
 
@@ -436,10 +437,14 @@ tried and rejected along the way, is in `key-detection-feature-plan.md`.
   and what the SDK's own Xcode projects build.
 * `kiss_fft` and `pffft` are both vendored, and both are always built. Which
   one `bpmcore` links, and at what width, is `cmake/fft_backend.cmake`'s
-  decision - `-DBPMCORE_FFT_BACKEND=kiss|pffft` and
-  `-DBPMCORE_FFT_SCALAR=double|float`. pffft is about six times faster at these
+  decision - `-DBPMCORE_FFT_BACKEND=pffft|kiss` and
+  `-DBPMCORE_FFT_SCALAR=float|double`. pffft is about six times faster at these
   sizes and is single precision only; kiss is portable scalar C and builds
-  anywhere. The default is kiss at double, which is what the component ships.
+  anywhere. **The default is pffft at float, which is what the component
+  ships**; naming kiss alone gives double, because the reference build is both
+  of those things at once. What the narrowing costs was measured over the whole
+  collection: of 12,157 tracks analysed by both, none changed its rhythm, its
+  meter or its metrical level.
 * `kiss_fft_test` checks the vendored library against stored reference
   spectra, and is wired into CTest. It existed for the half-complex packing the
   legacy engine's FFT wrapper performed; that wrapper is gone and `bpmcore`
@@ -506,8 +511,8 @@ Using the analysis elsewhere
 ----------------------------
 
 `bpmcore` is a static library with one public header. Its only dependency is a
-transform - KISS FFT by default, or pffft where speed matters more than
-portability; there is no foobar2000, Windows or ATL in it.
+transform - pffft by default, or KISS FFT where portability matters more than
+speed; there is no foobar2000, Windows or ATL in it.
 
 ```cpp
 #include <bpmcore/bpmcore.h>

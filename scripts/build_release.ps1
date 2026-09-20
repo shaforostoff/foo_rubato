@@ -27,18 +27,19 @@
 .PARAMETER Configuration
     CMake configuration. Default: Release.
 
-.PARAMETER Pffft
-    Build the spectral stage on PFFFT at single precision instead of KISS FFT
-    at double: about 1.7x on a whole analysis, and NOT what the component
-    ships. Gets its own build directory and its own archive name, so the two
-    can never be mistaken for one another. See cmake\fft_backend.cmake.
+.PARAMETER Kiss
+    Build the spectral stage on KISS FFT at double precision instead of PFFFT
+    at single: the portable reference the shipping transform is checked
+    against, about 1.6x slower over a whole analysis, and NOT what the
+    component ships. Gets its own build directory and its own archive name, so
+    the two can never be mistaken for one another. See cmake\fft_backend.cmake.
 
 .PARAMETER Dynamic
     Link the C runtime as a DLL rather than statically: 209KB off each DLL and
     111KB off each packed, and NOT what the component ships. The build
     then needs the Visual C++ redistributable present, and foobar2000 refuses
     to load a component whose runtime is missing without saying much about
-    why. Own build directory and own archive name, as -Pffft.
+    why. Own build directory and own archive name, as -Kiss.
 
 .PARAMETER SkipTests
     Do not run the verification harness. Not recommended.
@@ -53,7 +54,7 @@
     .\scripts\build_release.ps1 -Arch x64 -Clean
 
 .EXAMPLE
-    .\scripts\build_release.ps1 -Pffft
+    .\scripts\build_release.ps1 -Kiss
 
 .EXAMPLE
     .\scripts\build_release.ps1 -Dynamic -Arch x64
@@ -64,7 +65,7 @@ param(
     [ValidateSet('x86', 'x64')]
     [string[]] $Arch = @('x86', 'x64'),
     [string]   $Configuration = 'Release',
-    [switch]   $Pffft,
+    [switch]   $Kiss,
     [switch]   $Dynamic,
     [switch]   $SkipTests,
     [switch]   $Clean
@@ -106,16 +107,18 @@ Write-Host "foo_rubato $version" -ForegroundColor Cyan
 # configuration worth releasing that needs finer control than this: KISS at
 # float is a precision probe rather than something to ship, PFFFT has no double
 # to offer, and cmake\fft_backend.cmake and the FOO_RUBATO_* options are still
-# there for a build that wants to say something else.
+# there for a build that wants to say something else. -Kiss therefore moves the
+# width along with the transform, which is the whole of what the reference
+# build is.
 $cmakeArgs = @()
 $suffix    = ''
 
-if ($Pffft) {
-    $cmakeArgs += '-DBPMCORE_FFT_BACKEND=pffft', '-DBPMCORE_FFT_SCALAR=float'
-    $suffix    += '-pffft'
-    Write-Host '  spectral stage: PFFFT, float - not the shipping configuration' -ForegroundColor Yellow
+if ($Kiss) {
+    $cmakeArgs += '-DBPMCORE_FFT_BACKEND=kiss', '-DBPMCORE_FFT_SCALAR=double'
+    $suffix    += '-kiss'
+    Write-Host '  spectral stage: KISS FFT, double - not the shipping configuration' -ForegroundColor Yellow
 } else {
-    Write-Host '  spectral stage: KISS FFT, double' -ForegroundColor DarkGray
+    Write-Host '  spectral stage: PFFFT, float' -ForegroundColor DarkGray
 }
 
 if ($Dynamic) {
@@ -201,8 +204,8 @@ File > Preferences > Components > Install...
 "@ -ForegroundColor Yellow
 
 $notes = @()
-if ($Pffft) {
-    $notes += 'It analyses with PFFFT at single precision rather than KISS at double.'
+if ($Kiss) {
+    $notes += 'It analyses with KISS FFT at double precision rather than PFFFT at single.'
 }
 if ($Dynamic) {
     $notes += 'It links the C runtime as a DLL, so foobar2000 will refuse to load it where the Visual C++ redistributable is missing, and will say little about why.'
