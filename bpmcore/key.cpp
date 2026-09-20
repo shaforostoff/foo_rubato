@@ -153,30 +153,35 @@ namespace
 		float median() const { return m_sorted[m_sorted.size() / 2]; }
 
 		//! Replace `out`, which must be in the window, with `in`.
+		//!
+		//! Both positions are counted rather than searched for. Over a sorted
+		//! window the number of values below `out` is its own index, and the
+		//! number at or below `in` is one past where `in` belongs, so two
+		//! branchless passes give what two binary searches would - and the
+		//! compiler vectorises the passes, which it cannot do with a search.
+		//! Measured 1.8x faster over the real geometry, bit for bit the same
+		//! window afterwards.
 		void slide(float out, float in)
 		{
-			std::vector<float> & s = m_sorted;
-			const std::size_t i = static_cast<std::size_t>(
-				std::lower_bound(s.begin(), s.end(), out) - s.begin());
+			float * const s = m_sorted.data();
+			const int n = static_cast<int>(m_sorted.size());
 			if (in > out)
 			{
+				int i = 0, j = 0;
+				for (int k = 0; k < n; k++) { i += (s[k] < out); j += (s[k] <= in); }
+				--j;
 				// Everything in (i, j] slides down one place and `in` lands at j.
-				const std::size_t j = static_cast<std::size_t>(
-					std::upper_bound(s.begin() + i + 1, s.end(), in) - s.begin()) - 1;
-				std::copy(s.begin() + i + 1, s.begin() + j + 1, s.begin() + i);
+				for (int k = i; k < j; k++) s[k] = s[k + 1];
 				s[j] = in;
 			}
 			else if (in < out)
 			{
-				const std::size_t j = static_cast<std::size_t>(
-					std::lower_bound(s.begin(), s.begin() + i, in) - s.begin());
-				std::copy_backward(s.begin() + j, s.begin() + i, s.begin() + i + 1);
+				int i = 0, j = 0;
+				for (int k = 0; k < n; k++) { i += (s[k] < out); j += (s[k] < in); }
+				for (int k = i; k > j; k--) s[k] = s[k - 1];
 				s[j] = in;
 			}
-			else
-			{
-				s[i] = in;
-			}
+			// in == out leaves the window exactly as it was.
 		}
 
 	private:
@@ -336,6 +341,43 @@ namespace
 		const int n_threads = resolve_threads(threads, frames, 4 * min_frames_per_thread);
 		const int block = std::max(64, (frames + n_threads - 1) / n_threads);
 		const int blocks = (frames + block - 1) / block;
+		// Windows overlap four to one at the geometry this actually runs at,
+		// so summing each one whole reads every sample four times. One sum per
+		// hop, added up in fours, reads each sample once and measured four
+		// times faster. The association changes, so the last bits of the sum
+		// can; the gate it feeds is a comparison against 0.4 of the median,
+		// and over 135 sides not one frame changed sides.
+		//
+		// Only where the window is a whole number of hops, which is every rate
+		// that reaches here by the ordinary route. The odd-rate fallback keeps
+		// the direct sum.
+		if (nfft % hop == 0)
+		{
+			const int per = nfft / hop;
+			const int blks = frames + per - 1;
+			std::vector<double> hop_sum(static_cast<std::size_t>(blks), 0.0);
+			const int hop_threads = resolve_threads(threads, blks, min_frames_per_thread);
+			const int hop_block = std::max(64, (blks + hop_threads - 1) / hop_threads);
+			parallel_blocks((blks + hop_block - 1) / hop_block, hop_threads, [&](int b)
+			{
+				const int begin = b * hop_block, end = std::min(begin + hop_block, blks);
+				for (int h = begin; h < end; h++)
+				{
+					const float * src = mono + static_cast<std::size_t>(h) * hop;
+					double sum = 0;
+					for (int i = 0; i < hop; i++) sum += static_cast<double>(src[i]) * src[i];
+					hop_sum[h] = sum;
+				}
+			});
+			for (int f = 0; f < frames; f++)
+			{
+				double sum = 0;
+				for (int i = 0; i < per; i++) sum += hop_sum[f + i];
+				out[f] = static_cast<float>(std::sqrt(sum / nfft));
+			}
+			return;
+		}
+
 		parallel_blocks(blocks, n_threads, [&](int b)
 		{
 			const int begin = b * block, end = std::min(begin + block, frames);

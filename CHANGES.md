@@ -45,7 +45,7 @@ Change Log
   a track with no year or one recorded from 1976 on.
 
 * Detection costs about as much again as the tempo analysis - a 196-second
-  side goes from 2000x realtime to 900x on one thread - which is still a
+  side goes from 2400x realtime to 1200x on one thread - which is still a
   small fraction of what decoding it costs. It can be switched off on the
   preferences page, along with each of the three groups of fields separately.
 
@@ -60,6 +60,35 @@ Change Log
   that transposing the audio transposes the answer at all twelve semitones.
   `tag_format` checks the exact strings that reach people's files. Neither
   needs any audio on disk.
+
+* **The analysis is about 1.4x faster on one thread, and 2x in the 32-bit
+  build**, without a single figure moving: over the 135 Troilo sides both the
+  key output and the tempo output come back byte for byte identical to what
+  they were. Three loops were doing more work than they had to, and profiling
+  the stage timings said which.
+
+  The spectral whitening's sliding median - which on its own was 37% of the
+  whole analysis - stops searching for where values belong. Over a sorted
+  window the count of values below the one leaving *is* its index, and the
+  count at or below the one arriving is one past where it lands, so two
+  branchless passes replace two binary searches. The compiler vectorises the
+  passes and cannot vectorise a search. A branchless binary search was tried
+  first and was no faster, which is what showed the searching was never the
+  cost: the mispredicted branches were.
+
+  The onset envelope's half-wave rectifier is written as a select rather than
+  a branch. The sign of a flux difference is not predictable and adding a zero
+  changes no sum, so this is the same arithmetic in the same order - six times
+  faster over that loop, for one line.
+
+  The key stage's frame RMS reads each sample once instead of four times. Its
+  windows overlap four to one, so one sum per hop added up in fours is the
+  same figure; the association changes, so the last bits of the sum can, and
+  over 135 sides not one frame changed sides of the silence gate.
+
+* `autocorrelate` hands its per-window results to the caller rather than
+  copying them and then reading its own copy. On a long side that is a
+  megabyte that was live twice for no reason.
 
 ### Version 0.1.0
 

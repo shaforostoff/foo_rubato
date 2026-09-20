@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace bpmcore
 {
@@ -323,9 +324,6 @@ void autocorrelate(const std::vector<float> & y, std::vector<double> & acf,
 
 	if (per_window.empty()) return;
 
-	// Copied rather than moved: the median below reads them all.
-	if (per_window_out != nullptr) *per_window_out = per_window;
-
 	acf.assign(L, 0.0);
 	std::vector<double> column(per_window.size());
 	for (int lag = 0; lag < L; lag++)
@@ -335,6 +333,11 @@ void autocorrelate(const std::vector<float> & y, std::vector<double> & acf,
 		const std::size_t m = column.size();
 		acf[lag] = (m & 1) ? column[m / 2] : 0.5 * (column[m / 2 - 1] + column[m / 2]);
 	}
+
+	// Handed over rather than copied. The median above is the last thing that
+	// reads them, so the caller can have the windows themselves - which on a
+	// long side is a megabyte that was live twice for no reason.
+	if (per_window_out != nullptr) *per_window_out = std::move(per_window);
 }
 
 grid find_grid(const std::vector<double> & r, double frame_rate)

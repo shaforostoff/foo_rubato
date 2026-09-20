@@ -188,17 +188,25 @@ say so directly rather than leaning on the year.
   rate-independent by construction. That is what lets the stage run on whatever the
   collector happens to hold rather than resampling the track a second time.
 - **The 101-bin running median was the expensive part**, as predicted — 750 medians of
-  101 values for every frame of every track. `running_median` in `key.cpp` keeps the
-  window sorted and moves one element per step, a binary search and a memmove of at most
-  half the window, which measured about ten times faster than an `nth_element` per bin.
+  101 values for every frame of every track, and 37% of the whole analysis when it first
+  shipped. `running_median` in `key.cpp` keeps the window sorted and moves one element
+  per step, which measured about ten times faster than an `nth_element` per bin. It then
+  stopped searching for the two positions and counted them instead: over a sorted window
+  the number of values below the one leaving is its index, and the number at or below the
+  one arriving is one past where it lands, so two branchless passes do what two binary
+  searches did, 1.8x faster, because the compiler vectorises a counting pass and cannot
+  vectorise a search. A branchless binary search was tried first and was no faster, which
+  is what showed the searching had never been the cost — the mispredicted branches were.
 - Decode dominates a library scan, so tuning and key ride along on the decode the tempo
   analysis is already paying for. They are a separate spectral pass over the same buffer,
   not the same pass: a tempo wants a 46 ms window and a pitch wants 372 ms.
-- **Measured cost**, one thread on a 196-second side: 0.097 s for the tempo alone,
-  0.220 s with tuning and key. On all cores, 0.025 s and 0.050 s. So it roughly doubles
-  the analysis and leaves it at 900× realtime, against a decode of the same side that
+- **Measured cost**, one thread on a 196-second side: 0.082 s for the tempo alone,
+  0.163 s with tuning and key. On all cores, 0.021 s and 0.040 s. So it roughly doubles
+  the analysis and leaves it at 1200× realtime, against a decode of the same side that
   costs several times that. The conditional mode tracking floated above turned out not to
-  be needed, because reusing the frames made it nearly free.
+  be needed, because reusing the frames made it nearly free. (These are the figures after
+  the median rewrite above; as first written the same side measured 0.097 s and 0.220 s,
+  or 900×.)
 - The key is computed **before** the tempo, so that a side whose tempo the grid never
   settles on still comes back with a key. The two answers stand or fall separately, and
   `progress_range` gives each stage half the progress bar.
