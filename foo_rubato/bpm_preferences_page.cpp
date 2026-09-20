@@ -14,6 +14,13 @@ void bpm_preferences_page::reset()
 	CheckDlgButton(ID_CONFIG_WRITE_INITIAL_BPM, BST_CHECKED);
 	CheckDlgButton(ID_CONFIG_WRITE_BPM_ALGORITHM, BST_CHECKED);
 
+	// Tuning and key
+	CheckDlgButton(ID_CONFIG_DETECT_KEY, BST_CHECKED);
+	CheckDlgButton(ID_CONFIG_WRITE_KEY, BST_CHECKED);
+	CheckDlgButton(ID_CONFIG_WRITE_TUNING, BST_CHECKED);
+	CheckDlgButton(ID_CONFIG_WRITE_RETUNE, BST_CHECKED);
+	EnableKeyWriteButtons();
+
 	// Manual
 	SetDlgItemInt(ID_CONFIG_TAPS_TO_AVERAGE, 30, true);
 	SetDlgItemInt(ID_CONFIG_SECONDS_TO_RESET_AVERAGE, 5, true);
@@ -38,6 +45,13 @@ BOOL bpm_preferences_page::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	CheckDlgButton(ID_CONFIG_AUTO_WRITE_TAG, bpm_config_auto_write_tag ? BST_CHECKED : BST_UNCHECKED);
 	CheckDlgButton(ID_CONFIG_WRITE_INITIAL_BPM, bpm_config_write_initial_bpm ? BST_CHECKED : BST_UNCHECKED);
 	CheckDlgButton(ID_CONFIG_WRITE_BPM_ALGORITHM, bpm_config_write_bpm_algorithm ? BST_CHECKED : BST_UNCHECKED);
+
+	// Tuning and key
+	CheckDlgButton(ID_CONFIG_DETECT_KEY, bpm_config_detect_key ? BST_CHECKED : BST_UNCHECKED);
+	CheckDlgButton(ID_CONFIG_WRITE_KEY, bpm_config_write_key ? BST_CHECKED : BST_UNCHECKED);
+	CheckDlgButton(ID_CONFIG_WRITE_TUNING, bpm_config_write_tuning ? BST_CHECKED : BST_UNCHECKED);
+	CheckDlgButton(ID_CONFIG_WRITE_RETUNE, bpm_config_write_retune ? BST_CHECKED : BST_UNCHECKED);
+	EnableKeyWriteButtons();
 
 	// Manual
 	SetDlgItemInt(ID_CONFIG_TAPS_TO_AVERAGE, bpm_config_taps_to_average, true);
@@ -99,11 +113,31 @@ void bpm_preferences_page::OnBnClicked(UINT uNotifyCode, int nID, CWindow wndCtl
 			break;
 		case ID_CONFIG_WRITE_BPM_ALGORITHM:
 			break;
+		case ID_CONFIG_DETECT_KEY:
+			// Nothing is measured with detection off, so the three fields it
+			// would have filled have nothing to write and are greyed rather
+			// than left looking as though they still do something.
+			EnableKeyWriteButtons();
+			break;
+		case ID_CONFIG_WRITE_KEY:
+			break;
+		case ID_CONFIG_WRITE_TUNING:
+			break;
+		case ID_CONFIG_WRITE_RETUNE:
+			break;
 		default:
 			break;
 	}
 
 	OnChanged();
+}
+
+void bpm_preferences_page::EnableKeyWriteButtons()
+{
+	const BOOL on = IsDlgButtonChecked(ID_CONFIG_DETECT_KEY) == BST_CHECKED;
+	GetDlgItem(ID_CONFIG_WRITE_KEY).EnableWindow(on);
+	GetDlgItem(ID_CONFIG_WRITE_TUNING).EnableWindow(on);
+	GetDlgItem(ID_CONFIG_WRITE_RETUNE).EnableWindow(on);
 }
 
 void bpm_preferences_page::apply()
@@ -122,6 +156,10 @@ void bpm_preferences_page::apply()
 	bpm_config_auto_write_tag = (IsDlgButtonChecked(ID_CONFIG_AUTO_WRITE_TAG) == BST_CHECKED);
 	bpm_config_write_initial_bpm = (IsDlgButtonChecked(ID_CONFIG_WRITE_INITIAL_BPM) == BST_CHECKED);
 	bpm_config_write_bpm_algorithm = (IsDlgButtonChecked(ID_CONFIG_WRITE_BPM_ALGORITHM) == BST_CHECKED);
+	bpm_config_detect_key = (IsDlgButtonChecked(ID_CONFIG_DETECT_KEY) == BST_CHECKED);
+	bpm_config_write_key = (IsDlgButtonChecked(ID_CONFIG_WRITE_KEY) == BST_CHECKED);
+	bpm_config_write_tuning = (IsDlgButtonChecked(ID_CONFIG_WRITE_TUNING) == BST_CHECKED);
+	bpm_config_write_retune = (IsDlgButtonChecked(ID_CONFIG_WRITE_RETUNE) == BST_CHECKED);
 }
 
 t_uint32 bpm_preferences_page::get_state()
@@ -148,7 +186,11 @@ bool bpm_preferences_page::HasChanged()
 		bpm_config_output_debug != (IsDlgButtonChecked(ID_CONFIG_OUTPUT_DEBUG) == BST_CHECKED) ||
 		bpm_config_auto_write_tag != (IsDlgButtonChecked(ID_CONFIG_AUTO_WRITE_TAG) == BST_CHECKED) ||
 		bpm_config_write_initial_bpm != (IsDlgButtonChecked(ID_CONFIG_WRITE_INITIAL_BPM) == BST_CHECKED) ||
-		bpm_config_write_bpm_algorithm != (IsDlgButtonChecked(ID_CONFIG_WRITE_BPM_ALGORITHM) == BST_CHECKED))
+		bpm_config_write_bpm_algorithm != (IsDlgButtonChecked(ID_CONFIG_WRITE_BPM_ALGORITHM) == BST_CHECKED) ||
+		bpm_config_detect_key != (IsDlgButtonChecked(ID_CONFIG_DETECT_KEY) == BST_CHECKED) ||
+		bpm_config_write_key != (IsDlgButtonChecked(ID_CONFIG_WRITE_KEY) == BST_CHECKED) ||
+		bpm_config_write_tuning != (IsDlgButtonChecked(ID_CONFIG_WRITE_TUNING) == BST_CHECKED) ||
+		bpm_config_write_retune != (IsDlgButtonChecked(ID_CONFIG_WRITE_RETUNE) == BST_CHECKED))
 	{
 		changed = true;
 	}

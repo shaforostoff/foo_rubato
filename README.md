@@ -137,6 +137,9 @@ room and is what to use on a machine that is already short.
   all the rest of the component knows about either.
 * `bpmcore_test/` verifies the analysis without foobar2000 running, and can
   benchmark and profile it.
+* `foo_rubato_test/` checks the strings the component writes into files. It
+  links pfc and `bpmcore` but not the foobar2000 SDK, which is what
+  `bpm_key_format.h` is kept clear of the preferences page for.
 * `scripts/analysis/` is the Python reference implementation and the training
   pipeline that generates `bpmcore/rhythm_model.h`. See its README.
 
@@ -148,6 +151,10 @@ is left on the preferences page is what a user would actually choose:
 * **Tagging** - the BPM precision, the BPM tag name, whether to write tags
   without showing the results window, and whether to write `INITIALBPM` and
   `BpmAlgorithm` beside the BPM. The last two are on by default.
+* **Tuning and key** - whether to measure the tuning offset and the key at
+  all, and which of `KEY`, `TUNING` and `RETUNE` to write. All four are on by
+  default. Turning detection off greys the other three and saves about half
+  the analysis, which on a library scan is a small fraction of the decode.
 * **Manual Analysis** - taps to average, and how long a pause resets the
   average, for the tapping dialog.
 * **Diagnostics** - whether each track's analysis goes to the console.
@@ -349,6 +356,57 @@ being no opening tempo in a tap. Like `BpmAlgorithm` the name is fixed rather
 than configurable, and foobar2000 picks the spelling each container wants -
 `INITIALKEY`, the field it is named after, is upper case in a Vorbis comment,
 lower case in an iTunes freeform atom and the standard `TKEY` frame in ID3.
+
+### Tuning and key
+
+Two more measurements come off the same decode, and they are written as seven
+fields rather than two because neither is certain enough to state as a fact:
+
+    KEY                Dm
+    KEYCANDIDATES      Dm:0.866 C:0.702 Gm:0.701
+    KEYCONFIDENCE      high
+    MODEBALANCE        40% major, 7 switches
+    TUNING             -19.8
+    RETUNE             +0.00% to A=435
+    RETUNECANDIDATES   +0.00%@A=435 +1.15%@A=440
+
+`KEY` is the single best guess, so that a player or a DJ tool sees something
+usable. It is right about 60% of the time. `KEYCANDIDATES` is where most of
+what was measured actually is: the true key is somewhere in those three 93% of
+the time, and in the top confidence band every time. `KEYCONFIDENCE` says
+which of those numbers applies - in the `high` band the single answer is right
+86% of the time, in `low` it is right 42% of the time. The three travel
+together or none of them is written, because `KEY` on its own reads as a fact
+and it is not one.
+
+`MODEBALANCE` is which of the relative pair was in charge and how often it
+changed hands. That is not a key change: a tango with a minor A section and a
+major B section keeps one key signature throughout.
+
+`TUNING` is cents from A=440, matching the field beaTunes already writes, so
+both can sit in one library. It is a good deal more reliable than the key -
+against 130 transfers whose speed TangoTunes set by hand the median error is
+about 2 cents, and which of A=435 and A=440 the transfer was made at comes
+back from the audio alone 98% of the time.
+
+`RETUNE` is the speed correction that would put the side back on pitch, and it
+needs the recording year, which no amount of signal processing supplies: the
+component reads `ORIGINALDATE` first and falls back to `DATE`. A measured
+offset is only known modulo a semitone, and through the 1939-1944 transition
+both reference pitches were in use, so `RETUNECANDIDATES` carries the
+alternatives when there is more than one. Nothing is suggested for a track
+with no year, or one recorded from 1976 on.
+
+All of this is off one switch on the preferences page, and each of the three
+groups can be turned off separately. As with `BpmAlgorithm`, turning a field
+off stops this component adding one and does not let a stale value stand: a
+rescan that measures nothing removes the fields rather than leaving the last
+scan's answer behind. A BPM tapped by hand leaves them alone entirely - a tap
+says nothing about the key, and a measurement already on the file is still
+true.
+
+How all of this was derived and measured, and the eight approaches that were
+tried and rejected along the way, is in `key-detection-feature-plan.md`.
 
 ### How the build hangs together
 

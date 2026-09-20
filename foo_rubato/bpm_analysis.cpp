@@ -105,6 +105,10 @@ bpmcore::analysis bpm_analyse(const metadb_handle_ptr & track,
 	core_listener listener(progress, abort);
 	bpmcore::options options;
 	options.threads = analysis_threads;
+	// Roughly doubles the analysis when it is on, which is still a small
+	// fraction of the decode above - and the decode is what a library scan
+	// actually costs.
+	options.detect_key = bpm_config_detect_key;
 	result = collector->finish(&listener, &options);
 	abort.check();
 	const auto analysed = std::chrono::steady_clock::now();
@@ -124,10 +128,29 @@ bpmcore::analysis bpm_analyse(const metadb_handle_ptr & track,
 	{
 		FB2K_console_formatter() << "foo_rubato: could not measure a tempo in " << track->get_path()
 		                         << " (" << pfc::format_float(result.duration, 0, 1) << "s decoded).";
-		return result;
+		// Not an early return any more: the key and the tuning are measured
+		// from their own pass and stand or fall on their own, so a side whose
+		// tempo the grid never settled on can still come back with a key.
 	}
 
-	if (bpm_config_output_debug)
+	if (bpm_config_output_debug && result.key.ok)
+	{
+		const bpmcore::key_analysis & k = result.key;
+		pfc::string_formatter mode;
+		if (k.major_fraction >= 0)
+			mode << ", " << pfc::format_float(100.0 * k.major_fraction, 0, 0)
+			     << "% major over " << k.mode_windows << " windows";
+		FB2K_console_formatter() << "foo_rubato: " << pfc::string_filename_ext(track->get_path())
+			<< " -> key " << bpmcore::key_name(k.best.root, k.best.minor)
+			<< " (" << bpmcore::key_confidence_name(k.confidence)
+			<< ", margin " << pfc::format_float(k.margin, 0, 3) << "), tuning "
+			<< pfc::format_float(k.tuning_cents, 0, 1) << " cents"
+			<< " (R=" << pfc::format_float(k.tuning_r, 0, 2) << ")"
+			<< (k.near_wrap ? ", near the semitone wrap" : "")
+			<< mode;
+	}
+
+	if (bpm_config_output_debug && result.ok)
 	{
 		FB2K_console_formatter() << "foo_rubato: " << pfc::string_filename_ext(track->get_path())
 			<< " -> " << pfc::format_float(result.bpm, 0, 2) << " BPM, "

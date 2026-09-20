@@ -51,6 +51,7 @@ set(FOO_RUBATO_SOURCES
     bpm_auto_analysis_thread.h
     bpm_contextmenu_item.h
     bpm_result_format.h
+    bpm_track_result.h
     bpm_ui.h
     fft_license.h
     file_info_filter_bpm.h

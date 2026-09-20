@@ -449,20 +449,28 @@ void bpm_auto_analysis_thread::run(threaded_process_status & p_status, abort_cal
 		m_infos.remove_mask(mask);
 	}
 
-	m_bpm_results.clear();
-	m_rhythms.clear();
-	m_spreads.clear();
-	m_initial_bpms.clear();
+	// m_infos has already had the missing files removed from it, so it is
+	// indexed by the position in the output rather than by the scan position.
+	m_results.clear();
+	m_results.reserve(m_infos.get_size());
 
 	for (t_size index = 0; index < total; index++)
 	{
 		if (missing[index] != 0) continue;
 
 		const bpmcore::analysis & result = results[index];
-		m_bpm_results.push_back(result.bpm);
-		m_rhythms.push_back(result.ok ? bpmcore::rhythm_name(result.rhythm) : "");
-		m_spreads.push_back(result.ok ? result.bpm_spread : 0.0);
-		m_initial_bpms.push_back(result.ok ? result.initial_bpm : 0.0);
+		bpm_track_result r;
+		r.bpm = result.bpm;
+		r.rhythm = result.ok ? bpmcore::rhythm_name(result.rhythm) : "";
+		r.spread = result.ok ? result.bpm_spread : 0.0;
+		r.initial_bpm = result.ok ? result.initial_bpm : 0.0;
+		r.key = result.key;
+		// The year is a tag, not something the audio can be asked. Without it
+		// there is no retune suggestion, the measured offset being the same
+		// whether it means A=435 or a transfer running slow.
+		const t_size at = m_results.size();
+		if (at < m_infos.get_size()) r.year = bpm_year_of(m_infos[at]);
+		m_results.push_back(r);
 	}
 }
 
@@ -471,7 +479,6 @@ void bpm_auto_analysis_thread::on_done(ctx_t p_wnd, bool p_was_aborted)
 
 	if (!p_was_aborted && core_api::assert_main_thread())
 	{
-		bpm_show_results(m_tracks, m_infos, m_bpm_results, m_rhythms, m_spreads,
-		                 m_initial_bpms);
+		bpm_show_results(m_tracks, m_infos, m_results);
 	}
 }

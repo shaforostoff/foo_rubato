@@ -209,6 +209,7 @@ if(FOO_RUBATO_BUILD_TESTS)
     add_subdirectory(kiss_fft_test)
     add_subdirectory(fft_backend_test)
     add_subdirectory(bpmcore_test)
+    add_subdirectory(foo_rubato_test)
     # dialog_test draws Win32 dialog templates out of the built DLL. There are
     # no dialog templates in the macOS component - its windows are built in
     # code, where a clipped label is a layout constraint rather than a resource

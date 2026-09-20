@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "../bpm_result_format.h"
+#include "../bpm_track_result.h"
 #include "../bpm_ui.h"
 #include "../file_info_filter_bpm.h"
 #include "../format_bpm.h"
@@ -30,18 +31,14 @@ namespace
 	//! and the rows are the user's to double and halve from here.
 	struct results_model
 	{
-		metadb_handle_list          tracks;
-		pfc::list_t<file_info_impl> infos;
-		std::vector<double>         bpms;
-		std::vector<pfc::string8>   rhythms;
-		std::vector<double>         spreads;
-		std::vector<double>         initial_bpms;
+		metadb_handle_list            tracks;
+		pfc::list_t<file_info_impl>   infos;
+		//! One per row. Carries the tempo figures the double and halve
+		//! buttons scale, and the `adjusted` flag those buttons set - for
+		//! which file_info_filter_bpm drops the attribution tag.
+		std::vector<bpm_track_result> results;
 		//! What the BPM tag held before the scan, as the file carried it.
-		std::vector<pfc::string8>   tag_bpms;
-		//! Rows the user doubled or halved, which therefore no longer carry
-		//! the analysis's own answer - file_info_filter_bpm drops the
-		//! attribution tag for those.
-		std::vector<bool>           adjusted;
+		std::vector<pfc::string8>     tag_bpms;
 	};
 
 	//! Hands the whole list to foobar2000's tag writer.
@@ -54,9 +51,8 @@ namespace
 
 		metadb_io_v2::get()->update_info_async(
 			model.tracks,
-			fb2k::service_new<file_info_filter_bpm>(model.tracks, bpm_tag_name(), model.bpms,
-			                                        rhythm_tag.is_empty() ? nullptr : rhythm_tag.get_ptr(),
-			                                        model.rhythms, model.adjusted, model.initial_bpms),
+			fb2k::service_new<file_info_filter_bpm>(model.tracks, bpm_tag_name(), model.results,
+			                                        rhythm_tag.is_empty() ? nullptr : rhythm_tag.get_ptr()),
 			core_api::get_main_window(),
 			metadb_io_v2::op_flag_background | metadb_io_v2::op_flag_delay_ui,
 			NULL);
@@ -94,6 +90,20 @@ namespace
 	NSString * const col_initial = @"initial";
 	NSString * const col_spread  = @"spread";
 	NSString * const col_rhythm  = @"rhythm";
+	NSString * const col_key     = @"key";
+	NSString * const col_tuning  = @"tuning";
+
+	//! Was anything measured? With key detection switched off in the
+	//! preferences there is nothing to put in those two columns, and two
+	//! permanently empty ones would only push the title out of the window.
+	bool any_key(const results_model & model)
+	{
+		for (const bpm_track_result & r : model.results)
+		{
+			if (r.key.ok) return true;
+		}
+		return false;
+	}
 }
 
 
@@ -121,6 +131,7 @@ static NSMutableArray<fooRubatoResultsWindow *> * g_openWindows = nil;
 - (instancetype)initWithModel:(std::shared_ptr<results_model>)model
 {
 	const BOOL haveTagBPM = any_tag_bpm(*model) ? YES : NO;
+	const BOOL haveKey = any_key(*model) ? YES : NO;
 
 	NSWindow * window =
 		[[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 720, 420)
@@ -137,7 +148,7 @@ static NSMutableArray<fooRubatoResultsWindow *> * g_openWindows = nil;
 	if (self == nil) return nil;
 
 	_model = model;
-	[self buildContentWithTagColumn:haveTagBPM];
+	[self buildContentWithTagColumn:haveTagBPM keyColumns:haveKey];
 	window.delegate = self;
 
 	return self;
@@ -154,7 +165,7 @@ static NSMutableArray<fooRubatoResultsWindow *> * g_openWindows = nil;
 	return column;
 }
 
-- (void)buildContentWithTagColumn:(BOOL)haveTagBPM
+- (void)buildContentWithTagColumn:(BOOL)haveTagBPM keyColumns:(BOOL)haveKey
 {
 	NSView * root = self.window.contentView;
 
@@ -180,6 +191,14 @@ static NSMutableArray<fooRubatoResultsWindow *> * g_openWindows = nil;
 	[self addColumn:col_initial title:@"Initial BPM" width:90];
 	[self addColumn:col_spread title:@"Fluctuation" width:90];
 	[self addColumn:col_rhythm title:@"Rhythm" width:80];
+	// Where the recording sits against A=440, and what key it is in. Both
+	// come from the same pass and neither is a tempo measurement, so they sit
+	// to the right of the group above rather than inside it.
+	if (haveKey)
+	{
+		[self addColumn:col_key title:@"Key" width:90];
+		[self addColumn:col_tuning title:@"Tuning" width:80];
+	}
 
 	NSScrollView * scroll = [[NSScrollView alloc] initWithFrame:NSZeroRect];
 	scroll.documentView = _table;
@@ -278,7 +297,7 @@ static NSMutableArray<fooRubatoResultsWindow *> * g_openWindows = nil;
 		if ([column.identifier isEqualToString:col_title]) continue;
 
 		CGFloat widest = [column.title sizeWithAttributes:headerAttrs].width;
-		for (NSInteger row = 0; row < (NSInteger) _model->bpms.size(); row++)
+		for (NSInteger row = 0; row < (NSInteger) _model->results.size(); row++)
 		{
 			NSString * text = [self textForRow:row column:column.identifier];
 			widest = MAX(widest, [text sizeWithAttributes:cellAttrs].width);
@@ -296,30 +315,33 @@ static NSMutableArray<fooRubatoResultsWindow *> * g_openWindows = nil;
 {
 	const results_model & model = *_model;
 	const std::size_t index = (std::size_t) row;
-	if (index >= model.bpms.size()) return @"";
+	if (index >= model.results.size()) return @"";
+	const bpm_track_result & r = model.results[index];
 
 	if ([identifier isEqualToString:col_title])
 		return fooRubatoStr(row_title(model, index));
 	if ([identifier isEqualToString:col_bpm])
-		return fooRubatoStr(format_bpm(model.bpms[index]).get_ptr());
+		return fooRubatoStr(format_bpm(r.bpm).get_ptr());
 	if ([identifier isEqualToString:col_tag_bpm])
 		return index < model.tag_bpms.size()
 		     ? fooRubatoStr(bpm_format_tag_bpm(model.tag_bpms[index])) : @"";
 	if ([identifier isEqualToString:col_initial])
-		return index < model.initial_bpms.size()
-		     ? fooRubatoStr(bpm_format_initial(model.initial_bpms[index])) : @"";
+		return fooRubatoStr(bpm_format_initial(r.initial_bpm));
 	if ([identifier isEqualToString:col_spread])
-		return index < model.spreads.size()
-		     ? fooRubatoStr(bpm_format_spread(model.spreads[index])) : @"";
+		return fooRubatoStr(bpm_format_spread(r.spread));
 	if ([identifier isEqualToString:col_rhythm])
-		return index < model.rhythms.size() ? fooRubatoStr(model.rhythms[index]) : @"";
+		return fooRubatoStr(r.rhythm);
+	if ([identifier isEqualToString:col_key])
+		return fooRubatoStr(bpm_format_key_column(r.key));
+	if ([identifier isEqualToString:col_tuning])
+		return fooRubatoStr(bpm_format_tuning_column(r.key));
 
 	return @"";
 }
 
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView
 {
-	return (NSInteger) _model->bpms.size();
+	return (NSInteger) _model->results.size();
 }
 
 - (NSView *)tableView:(NSTableView *)tableView
@@ -360,15 +382,18 @@ static NSMutableArray<fooRubatoResultsWindow *> * g_openWindows = nil;
 	NSIndexSet * selected = _table.selectedRowIndexes;
 
 	[selected enumerateIndexesUsingBlock:^(NSUInteger row, BOOL * stop) {
-		if (row >= model.bpms.size()) return;
+		if (row >= model.results.size()) return;
+		bpm_track_result & r = model.results[row];
 
-		model.bpms[row] *= factor;
-		model.adjusted[row] = true;
+		r.bpm *= factor;
+		r.adjusted = true;
 
 		// The fluctuation and the opening tempo are both quoted in BPM at the
-		// level the BPM column shows, so they follow the same factor.
-		if (row < model.initial_bpms.size()) model.initial_bpms[row] *= factor;
-		if (row < model.spreads.size())      model.spreads[row]      *= factor;
+		// level the BPM column shows, so they follow the same factor. The key
+		// and the tuning do not: they are not tempo measurements, and nothing
+		// these buttons do can change them.
+		r.initial_bpm *= factor;
+		r.spread      *= factor;
 	}];
 
 	[_table reloadDataForRowIndexes:selected
@@ -401,19 +426,12 @@ static NSMutableArray<fooRubatoResultsWindow *> * g_openWindows = nil;
 
 void bpm_show_results(metadb_handle_list_cref p_tracks,
                       const pfc::list_t<file_info_impl> & p_infos,
-                      const std::vector<double> & p_bpm_results,
-                      const std::vector<pfc::string8> & p_rhythms,
-                      const std::vector<double> & p_spreads,
-                      const std::vector<double> & p_initial_bpms)
+                      const std::vector<bpm_track_result> & p_results)
 {
 	auto model = std::make_shared<results_model>();
-	model->tracks       = p_tracks;
-	model->infos        = p_infos;
-	model->bpms         = p_bpm_results;
-	model->rhythms      = p_rhythms;
-	model->spreads      = p_spreads;
-	model->initial_bpms = p_initial_bpms;
-	model->adjusted.assign(p_bpm_results.size(), false);
+	model->tracks  = p_tracks;
+	model->infos   = p_infos;
+	model->results = p_results;
 
 	// Read before anything can write to the copy in the model. Kept as the
 	// string the file carried rather than a parsed number: it is being shown

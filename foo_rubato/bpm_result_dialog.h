@@ -6,6 +6,7 @@
 #include <SDK/foobar2000.h>
 #include <helpers/atl-misc.h>
 
+#include "bpm_track_result.h"
 #include "resource.h"
 
 class bpm_result_dialog : public CDialogImpl<bpm_result_dialog>, private message_filter_impl_base
@@ -24,10 +25,9 @@ public:
 		MSG_WM_CLOSE(OnClose);
 	END_MSG_MAP()
 
-	bpm_result_dialog(metadb_handle_list_cref p_tracks, const pfc::list_t<file_info_impl> &p_infos,
-	                  const std::vector<double> &p_bpm_results, const std::vector<pfc::string8> &p_rhythms,
-	                  const std::vector<double> &p_spreads,
-	                  const std::vector<double> &p_initial_bpms);
+	bpm_result_dialog(metadb_handle_list_cref p_tracks,
+	                  const pfc::list_t<file_info_impl> &p_infos,
+	                  const std::vector<bpm_track_result> &p_results);
 		
 private:
 	LRESULT OnInitDialog(CWindow wndFocus, LPARAM lInitParam);
@@ -60,24 +60,22 @@ private:
 	int m_col_initial = 2;
 	int m_col_spread = 3;
 	int m_col_rhythm = 4;
+	//! -1 when nothing was measured on any track, which is what happens when
+	//! key detection is switched off in the preferences.
+	int m_col_key = -1;
+	int m_col_tuning = -1;
 
 	metadb_handle_list m_tracks;
 	pfc::list_t<file_info_impl> m_infos;
-	std::vector<double> m_bpm_results;
-	std::vector<pfc::string8> m_rhythms;
-	//! Tempo fluctuation per track, in BPM at the level shown in the BPM
-	//! column - so halving a BPM halves this with it.
-	std::vector<double> m_spreads;
-	//! The tempo each track opens at, at that same level and scaled with it.
-	std::vector<double> m_initial_bpms;
+	//! One entry per row, in the order shown. The tempo figures in here are
+	//! the ones the double and halve buttons scale, which is why the window
+	//! owns a copy rather than reading the analysis back.
+	std::vector<bpm_track_result> m_results;
 	//! Whatever the BPM tag held before the scan, per track, taken in the
 	//! constructor because ScaleSelectionBPM writes over m_infos later. On this
 	//! collection those are hand-tapped values, which is the whole reason for
 	//! showing them: the measurement can be read against the tap.
 	std::vector<pfc::string8> m_tag_bpms;
-	//! Rows whose BPM the user doubled or halved with the dialog's own
-	//! buttons, and which therefore no longer carry the analysis's answer.
-	std::vector<bool> m_adjusted;
 };
 
 #endif // __DPM_RESULT_DIALOG_H__

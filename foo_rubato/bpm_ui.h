@@ -5,6 +5,8 @@
 
 #include <SDK/foobar2000.h>
 
+#include "bpm_track_result.h"
+
 // The two windows the component puts up, as the rest of it sees them.
 //
 // Everything above this line is the same code on both platforms; everything
@@ -21,18 +23,12 @@
 //! The results window: one row per track, with the buttons that write the
 //! tags. Takes its own copy of everything it is given.
 //!
-//! @param p_tracks      the tracks that were analysed, in the order to show them
-//! @param p_infos       their file_info, already read, one per track
-//! @param p_bpm_results the measured BPM per track
-//! @param p_rhythms     the rhythm class per track, empty where none was found
-//! @param p_spreads     how far the tempo moved, in BPM; 0 where unmeasurable
-//! @param p_initial_bpms the tempo each track opens at; 0 where unmeasurable
+//! @param p_tracks  the tracks that were analysed, in the order to show them
+//! @param p_infos   their file_info, already read, one per track
+//! @param p_results what each track came back with, one per track
 void bpm_show_results(metadb_handle_list_cref p_tracks,
                       const pfc::list_t<file_info_impl> & p_infos,
-                      const std::vector<double> & p_bpm_results,
-                      const std::vector<pfc::string8> & p_rhythms,
-                      const std::vector<double> & p_spreads,
-                      const std::vector<double> & p_initial_bpms);
+                      const std::vector<bpm_track_result> & p_results);
 
 //! The manual tap window, which measures the tempo of whatever is playing from
 //! the user tapping along with it.

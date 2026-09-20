@@ -3,6 +3,11 @@
 
 #include <pfc/pfc.h>
 
+#include <bpmcore/bpmcore.h>
+
+// The tuning and key strings, which need neither the preferences page nor the
+// SDK and are checked on their own by foo_rubato_test.
+#include "bpm_key_format.h"
 #include "format_bpm.h"
 
 // How the generated columns of the results window are written out.

@@ -39,4 +39,13 @@ add_test(NAME tempo_spread COMMAND bpmcore_test tempo_spread)
 # has not moved the analysis window off the duration the model was fitted at.
 add_test(NAME fft_sizes COMMAND bpmcore_test fft_sizes)
 
+# Checks the tuning offset, the key and the retune arithmetic against
+# synthesised chords whose answers are known in advance: the offset has to come
+# back, taking it out has to leave the key where it was, and transposing the
+# audio has to transpose the answer. Synthesises its own audio, so it needs
+# nothing on disk. How good the detector is on real recordings is a different
+# question, which only labelled collections can answer - see
+# key-detection-feature-plan.md.
+add_test(NAME key_synth COMMAND bpmcore_test key_synth)
+
 set_target_properties(bpmcore_test PROPERTIES FOLDER "Tests")

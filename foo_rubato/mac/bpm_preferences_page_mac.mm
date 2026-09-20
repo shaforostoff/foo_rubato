@@ -38,6 +38,10 @@ namespace
 	NSButton       * _autoWriteTag;
 	NSButton       * _writeInitialBPM;
 	NSButton       * _writeAlgorithm;
+	NSButton       * _detectKey;
+	NSButton       * _writeKey;
+	NSButton       * _writeTuning;
+	NSButton       * _writeRetune;
 	NSTextField    * _tapsToAverage;
 	NSTextField    * _secondsToReset;
 	NSButton       * _outputDebug;
@@ -47,7 +51,7 @@ namespace
 
 - (instancetype)init
 {
-	// No nib: the page is eight controls in two columns, and building it here
+	// No nib: the page is a dozen controls in two columns, and building it here
 	// keeps the component a single binary with no resources to load - and no
 	// bundle lookup to get wrong.
 	self = [super initWithNibName:nil bundle:nil];
@@ -93,6 +97,15 @@ namespace
 	_writeAlgorithm  = [self checkboxWithTitle:@"Also write which analysis produced the BPM, as BpmAlgorithm"
 	                                    action:@selector(onWriteAlgorithmChanged:)];
 
+	_detectKey   = [self checkboxWithTitle:@"Measure the tuning offset and the key"
+	                                action:@selector(onDetectKeyChanged:)];
+	_writeKey    = [self checkboxWithTitle:@"Write KEY, with KEYCANDIDATES and KEYCONFIDENCE beside it"
+	                                action:@selector(onWriteKeyChanged:)];
+	_writeTuning = [self checkboxWithTitle:@"Write the offset from A=440, in cents, as TUNING"
+	                                action:@selector(onWriteTuningChanged:)];
+	_writeRetune = [self checkboxWithTitle:@"Write the speed correction the year suggests, as RETUNE"
+	                                action:@selector(onWriteRetuneChanged:)];
+
 	_tapsToAverage  = [self fieldWithWidth:60];
 	_secondsToReset = [self fieldWithWidth:60];
 
@@ -105,6 +118,10 @@ namespace
 		@[ [NSGridCell emptyContentView],                 _autoWriteTag ],
 		@[ [NSGridCell emptyContentView],                 _writeInitialBPM ],
 		@[ [NSGridCell emptyContentView],                 _writeAlgorithm ],
+		@[ [NSGridCell emptyContentView],                 _detectKey ],
+		@[ [NSGridCell emptyContentView],                 _writeKey ],
+		@[ [NSGridCell emptyContentView],                 _writeTuning ],
+		@[ [NSGridCell emptyContentView],                 _writeRetune ],
 		@[ [self labelWithText:@"Taps to average:"],      _tapsToAverage ],
 		@[ [self labelWithText:@"Restart the average after:"], _secondsToReset ],
 		@[ [NSGridCell emptyContentView],                 _outputDebug ],
@@ -115,11 +132,12 @@ namespace
 	grid.rowSpacing = 8;
 	[grid columnAtIndex:0].xPlacement = NSGridCellPlacementTrailing;
 
-	// The two groups the Windows page draws boxes around: tagging, then the
-	// tap window, then diagnostics. A rule is what serves for a group heading
-	// on a macOS preferences page.
-	[grid rowAtIndex:5].topPadding = 12;
-	[grid rowAtIndex:7].topPadding = 12;
+	// The groups the Windows page draws boxes around: tagging, then tuning and
+	// key, then the tap window, then diagnostics. A gap is what serves for a
+	// group heading on a macOS preferences page.
+	[grid rowAtIndex:5].topPadding = 12;    // tuning and key
+	[grid rowAtIndex:9].topPadding = 12;    // manual analysis
+	[grid rowAtIndex:11].topPadding = 12;   // diagnostics
 
 	// "seconds", after the field rather than in the label, because the number
 	// is the thing being set and the unit belongs to it.
@@ -155,7 +173,12 @@ namespace
 	_autoWriteTag.state    = bpm_config_auto_write_tag       ? NSControlStateValueOn : NSControlStateValueOff;
 	_writeInitialBPM.state = bpm_config_write_initial_bpm    ? NSControlStateValueOn : NSControlStateValueOff;
 	_writeAlgorithm.state  = bpm_config_write_bpm_algorithm  ? NSControlStateValueOn : NSControlStateValueOff;
+	_detectKey.state       = bpm_config_detect_key           ? NSControlStateValueOn : NSControlStateValueOff;
+	_writeKey.state        = bpm_config_write_key            ? NSControlStateValueOn : NSControlStateValueOff;
+	_writeTuning.state     = bpm_config_write_tuning         ? NSControlStateValueOn : NSControlStateValueOff;
+	_writeRetune.state     = bpm_config_write_retune         ? NSControlStateValueOn : NSControlStateValueOff;
 	_outputDebug.state     = bpm_config_output_debug         ? NSControlStateValueOn : NSControlStateValueOff;
+	[self enableKeyWriteBoxes];
 
 	_tapsToAverage.intValue  = (int) bpm_config_taps_to_average;
 	_secondsToReset.intValue = (int) bpm_config_seconds_to_reset_average;
@@ -179,6 +202,38 @@ namespace
 - (IBAction)onWriteAlgorithmChanged:(id)sender
 {
 	bpm_config_write_bpm_algorithm = (_writeAlgorithm.state == NSControlStateValueOn);
+}
+
+//! Nothing is measured with detection off, so the three fields it would have
+//! filled have nothing to write and are greyed rather than left looking as
+//! though they still do something.
+- (void)enableKeyWriteBoxes
+{
+	const BOOL on = _detectKey.state == NSControlStateValueOn;
+	_writeKey.enabled    = on;
+	_writeTuning.enabled = on;
+	_writeRetune.enabled = on;
+}
+
+- (IBAction)onDetectKeyChanged:(id)sender
+{
+	bpm_config_detect_key = (_detectKey.state == NSControlStateValueOn);
+	[self enableKeyWriteBoxes];
+}
+
+- (IBAction)onWriteKeyChanged:(id)sender
+{
+	bpm_config_write_key = (_writeKey.state == NSControlStateValueOn);
+}
+
+- (IBAction)onWriteTuningChanged:(id)sender
+{
+	bpm_config_write_tuning = (_writeTuning.state == NSControlStateValueOn);
+}
+
+- (IBAction)onWriteRetuneChanged:(id)sender
+{
+	bpm_config_write_retune = (_writeRetune.state == NSControlStateValueOn);
 }
 
 - (IBAction)onOutputDebugChanged:(id)sender

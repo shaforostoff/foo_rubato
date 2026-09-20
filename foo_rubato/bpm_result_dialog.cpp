@@ -11,17 +11,12 @@
 
 using std::string;
 
-bpm_result_dialog::bpm_result_dialog(metadb_handle_list_cref p_tracks, const pfc::list_t<file_info_impl> &p_infos,
-                                     const std::vector<double> &p_bpm_results, const std::vector<pfc::string8> &p_rhythms,
-                                     const std::vector<double> &p_spreads,
-                                     const std::vector<double> &p_initial_bpms):
+bpm_result_dialog::bpm_result_dialog(metadb_handle_list_cref p_tracks,
+                                     const pfc::list_t<file_info_impl> &p_infos,
+                                     const std::vector<bpm_track_result> &p_results):
 	m_tracks(p_tracks),
 	m_infos(p_infos),
-	m_bpm_results(p_bpm_results),
-	m_rhythms(p_rhythms),
-	m_spreads(p_spreads),
-	m_initial_bpms(p_initial_bpms),
-	m_adjusted(p_bpm_results.size(), false)
+	m_results(p_results)
 {
 	// Read before anything here can write to m_infos. Kept as the string the
 	// file carried rather than a parsed number: it is being shown for
@@ -43,9 +38,8 @@ LRESULT bpm_result_dialog::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 		const pfc::string8 rhythm_tag = bpm_rhythm_tag_or_empty();
 		metadb_io_v2::get()->update_info_async(
 			m_tracks,
-			fb2k::service_new<file_info_filter_bpm>(m_tracks, bpm_tag_name(), m_bpm_results,
-			                                        rhythm_tag.is_empty() ? nullptr : rhythm_tag.get_ptr(),
-			                                        m_rhythms, m_adjusted, m_initial_bpms),
+			fb2k::service_new<file_info_filter_bpm>(m_tracks, bpm_tag_name(), m_results,
+			                                        rhythm_tag.is_empty() ? nullptr : rhythm_tag.get_ptr()),
 			core_api::get_main_window(),
 			metadb_io_v2::op_flag_background | metadb_io_v2::op_flag_delay_ui,
 			NULL);
@@ -82,6 +76,20 @@ LRESULT bpm_result_dialog::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 		listview_helper::insert_column(result_list, col++, "Fluctuation", 70);
 		m_col_rhythm = static_cast<int>(col);
 		listview_helper::insert_column(result_list, col++, "Rhythm", 70);
+		// Key and tuning only when something was measured. With detection
+		// switched off in the preferences there is nothing to put in them,
+		// and two permanently empty columns would push the title out of the
+		// window for no return.
+		const bool have_key =
+			std::any_of(m_results.begin(), m_results.end(),
+			            [](const bpm_track_result & r) { return r.key.ok; });
+		if (have_key)
+		{
+			m_col_key = static_cast<int>(col);
+			listview_helper::insert_column(result_list, col++, "Key", 70);
+			m_col_tuning = static_cast<int>(col);
+			listview_helper::insert_column(result_list, col++, "Tuning", 60);
+		}
 		// TODO: Allow selection of an alternate BPM
 	//	 listview_helper::insert_column(result_list, col++, "BPM (Alt)", 50);
 
@@ -102,20 +110,25 @@ LRESULT bpm_result_dialog::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 
 			listview_helper::insert_item(result_list, row, title_column.c_str(), 0);
 
-			format_bpm bpm_value(m_bpm_results[index]);
+			const bpm_track_result & r = m_results[index];
+			format_bpm bpm_value(r.bpm);
 
 			listview_helper::set_item_text(result_list, row, m_col_bpm, bpm_value);
 			if (m_col_tag_bpm >= 0 && index < m_tag_bpms.size())
 				listview_helper::set_item_text(result_list, row, m_col_tag_bpm,
 				                               bpm_format_tag_bpm(m_tag_bpms[index]));
-			if (index < m_initial_bpms.size())
-				listview_helper::set_item_text(result_list, row, m_col_initial,
-				                               bpm_format_initial(m_initial_bpms[index]));
-			if (index < m_spreads.size())
-				listview_helper::set_item_text(result_list, row, m_col_spread,
-				                               bpm_format_spread(m_spreads[index]));
-			if (row < m_rhythms.size())
-				listview_helper::set_item_text(result_list, row, m_col_rhythm, m_rhythms[row]);
+			listview_helper::set_item_text(result_list, row, m_col_initial,
+			                               bpm_format_initial(r.initial_bpm));
+			listview_helper::set_item_text(result_list, row, m_col_spread,
+			                               bpm_format_spread(r.spread));
+			listview_helper::set_item_text(result_list, row, m_col_rhythm, r.rhythm);
+			if (m_col_key >= 0)
+			{
+				listview_helper::set_item_text(result_list, row, m_col_key,
+				                               bpm_format_key_column(r.key));
+				listview_helper::set_item_text(result_list, row, m_col_tuning,
+				                               bpm_format_tuning_column(r.key));
+			}
 		}
 
 		SizeColumnsToContents();
@@ -136,9 +149,8 @@ LRESULT bpm_result_dialog::OnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	const pfc::string8 rhythm_tag = bpm_rhythm_tag_or_empty();
 	metadb_io_v2::get()->update_info_async(
 		m_tracks,
-		fb2k::service_new<file_info_filter_bpm>(m_tracks, bpm_tag_name(), m_bpm_results,
-		                                        rhythm_tag.is_empty() ? nullptr : rhythm_tag.get_ptr(),
-		                                        m_rhythms, m_adjusted, m_initial_bpms),
+		fb2k::service_new<file_info_filter_bpm>(m_tracks, bpm_tag_name(), m_results,
+		                                        rhythm_tag.is_empty() ? nullptr : rhythm_tag.get_ptr()),
 		core_api::get_main_window(),
 		metadb_io_v2::op_flag_background | metadb_io_v2::op_flag_delay_ui,
 		NULL);
@@ -212,28 +224,26 @@ void bpm_result_dialog::ScaleSelectionBPM(double p_factor)
 	int listview_index = -1;
 	while ((listview_index = ListView_GetNextItem(result_list, listview_index, LVIS_SELECTED)) != -1)
 	{
-		m_bpm_results[listview_index] = m_bpm_results[listview_index] * p_factor;
-		m_adjusted[listview_index] = true;
+		if (static_cast<std::size_t>(listview_index) >= m_results.size()) continue;
+		bpm_track_result & r = m_results[listview_index];
+		r.bpm *= p_factor;
+		r.adjusted = true;
 
-		format_bpm bpm_value(m_bpm_results[listview_index]);
+		format_bpm bpm_value(r.bpm);
 
 		m_infos[listview_index].meta_set(bpm_tag_name(), bpm_value);
 		listview_helper::set_item_text(result_list, listview_index, m_col_bpm, bpm_value);
 
 		// The fluctuation and the opening tempo are both quoted in BPM at the
-		// level the BPM column shows, so they follow the same factor.
-		if (static_cast<std::size_t>(listview_index) < m_initial_bpms.size())
-		{
-			m_initial_bpms[listview_index] *= p_factor;
-			listview_helper::set_item_text(result_list, listview_index, m_col_initial,
-			                               bpm_format_initial(m_initial_bpms[listview_index]));
-		}
-		if (static_cast<std::size_t>(listview_index) < m_spreads.size())
-		{
-			m_spreads[listview_index] *= p_factor;
-			listview_helper::set_item_text(result_list, listview_index, m_col_spread,
-			                               bpm_format_spread(m_spreads[listview_index]));
-		}
+		// level the BPM column shows, so they follow the same factor. The key
+		// and the tuning do not: they are not tempo measurements and nothing
+		// the double and halve buttons do can change them.
+		r.initial_bpm *= p_factor;
+		listview_helper::set_item_text(result_list, listview_index, m_col_initial,
+		                               bpm_format_initial(r.initial_bpm));
+		r.spread *= p_factor;
+		listview_helper::set_item_text(result_list, listview_index, m_col_spread,
+		                               bpm_format_spread(r.spread));
 	}
 
 	// A doubled BPM can be a digit wider than the one it replaced.
@@ -378,14 +388,10 @@ void bpm_result_dialog::LabelUpdateButton()
 
 void bpm_show_results(metadb_handle_list_cref p_tracks,
                       const pfc::list_t<file_info_impl> & p_infos,
-                      const std::vector<double> & p_bpm_results,
-                      const std::vector<pfc::string8> & p_rhythms,
-                      const std::vector<double> & p_spreads,
-                      const std::vector<double> & p_initial_bpms)
+                      const std::vector<bpm_track_result> & p_results)
 {
 	// Deletes itself in PostNcDestroy, so it is not held onto here.
-	bpm_result_dialog * dialog = new bpm_result_dialog(p_tracks, p_infos, p_bpm_results,
-	                                                   p_rhythms, p_spreads, p_initial_bpms);
+	bpm_result_dialog * dialog = new bpm_result_dialog(p_tracks, p_infos, p_results);
 
 	dialog->Create(core_api::get_main_window(), NULL);
 	if (dialog->IsWindow())

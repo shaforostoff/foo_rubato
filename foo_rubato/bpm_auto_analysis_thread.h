@@ -5,6 +5,8 @@
 
 #include <SDK/foobar2000.h>
 
+#include "bpm_track_result.h"
+
 class bpm_auto_analysis_thread : public threaded_process_callback
 {
 	public:
@@ -17,15 +19,11 @@ class bpm_auto_analysis_thread : public threaded_process_callback
 
 		pfc::list_t<metadb_handle_ptr> m_tracks;
 		pfc::list_t<file_info_impl> m_infos;
-		std::vector<double> m_bpm_results;
-		std::vector<pfc::string8> m_rhythms;
-		//! How much the tempo moves over each track, in BPM; 0 where the track
-		//! was too short to measure it. Kept as a number rather than formatted
-		//! here so that doubling or halving a result scales it too.
-		std::vector<double> m_spreads;
-		//! The tempo each track opens at, in BPM; 0 where its opening had no
-		//! beat to measure.
-		std::vector<double> m_initial_bpms;
+		//! What each surviving track came back with, in the order the results
+		//! window shows them. The tempo figures are kept as numbers rather
+		//! than formatted here, so that doubling or halving a result in that
+		//! window scales the fluctuation and the opening tempo with it.
+		std::vector<bpm_track_result> m_results;
 };
 
 #endif // __BPM_AUTO_ANALYSIS_THREAD_H__

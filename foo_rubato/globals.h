@@ -21,6 +21,24 @@
 // not: a reader has to know what it is called.
 #define BPM_INITIAL_TAG "INITIALBPM"
 
+// Tuning and key. Not configurable either, for the same reason: a reader has
+// to know what these are called, and TUNING in particular is the field
+// beaTunes already writes in cents, so the two can sit in one library without
+// either having to be told about the other.
+//
+// KEY holds one answer because that is what a player or a DJ tool will read.
+// KEYCANDIDATES holds all three with their scores, which is where most of
+// what was measured actually is: the first is right 60% of the time and the
+// true key is in the three 93% of the time. KEYCONFIDENCE says which of those
+// two numbers applies to this track.
+#define BPM_KEY_TAG              "KEY"
+#define BPM_KEY_CANDIDATES_TAG   "KEYCANDIDATES"
+#define BPM_KEY_CONFIDENCE_TAG   "KEYCONFIDENCE"
+#define BPM_MODE_BALANCE_TAG     "MODEBALANCE"
+#define BPM_TUNING_TAG           "TUNING"
+#define BPM_RETUNE_TAG           "RETUNE"
+#define BPM_RETUNE_CANDIDATES_TAG "RETUNECANDIDATES"
+
 // Config variables
 // General
 extern cfg_int bpm_config_bpm_precision;
@@ -28,6 +46,11 @@ extern cfg_string bpm_config_bpm_tag;
 extern cfg_bool bpm_config_auto_write_tag;
 extern cfg_bool bpm_config_write_initial_bpm;
 extern cfg_bool bpm_config_write_bpm_algorithm;
+// Tuning and key
+extern cfg_bool bpm_config_detect_key;
+extern cfg_bool bpm_config_write_key;
+extern cfg_bool bpm_config_write_tuning;
+extern cfg_bool bpm_config_write_retune;
 // Diagnostics
 extern cfg_bool bpm_config_output_debug;
 // Manual

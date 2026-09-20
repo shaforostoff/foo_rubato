@@ -24,14 +24,27 @@
 //       every sample rate a file might carry, and that the window it makes is
 //       still the duration the model was fitted at. Needs no audio.
 //
+//   key_synth
+//       check the tuning offset, the key and the retune arithmetic against
+//       synthesised chords whose answers are known in advance. Needs no audio.
+//
+//   key <audio file> [year] [threads]
+//       print one track's tuning, key candidates and retune suggestion.
+//
+//   key_batch <list file> [threads]
+//       the same for a whole collection, one TSV row each, for scoring
+//       against a discography. Each line is a path, optionally a tab and the
+//       recording year, which is what the retune suggestion needs.
+//
 //   batch <list of audio files> [threads]
 //       decode and analyse every track in a list file, one TSV row each, so
 //       two builds of the analysis can be compared over a whole collection.
 //       This is the only mode that needs ffmpeg, and the only one that reads
 //       anything but raw PCM.
 //
-//   bench <raw f32 mono file> <sample rate> [repeats]
-//       time the analysis.
+//   bench <raw f32 mono file> <sample rate> [repeats] [threads] [key 0|1]
+//       time the analysis. The last argument switches the tuning and key
+//       stage off, which is how its share of the run time is measured.
 //
 //   trajectory <raw f32 mono file> <sample rate>
 //       print the tempo measured in each autocorrelation window, which is what
@@ -416,7 +429,8 @@ namespace
 		return 0;
 	}
 
-	int run_bench(const char * path, unsigned sample_rate, int repeats, int threads)
+	int run_bench(const char * path, unsigned sample_rate, int repeats, int threads,
+	              bool detect_key)
 	{
 		std::vector<float> mono;
 		if (!read_pcm(path, mono))
@@ -430,7 +444,9 @@ namespace
 		for (int i = 0; i < repeats; i++)
 		{
 			const auto t0 = std::chrono::steady_clock::now();
-			bpmcore::options opt; opt.threads = threads;
+			bpmcore::options opt;
+			opt.threads = threads;
+			opt.detect_key = detect_key;
 			a = bpmcore::analyse(mono.data(), mono.size(), sample_rate, nullptr, &opt);
 			const double dt = std::chrono::duration<double>(
 				std::chrono::steady_clock::now() - t0).count();
@@ -858,6 +874,339 @@ namespace
 		return failures == 0 ? 0 : 1;
 	}
 
+	//! One track's tuning, key and retune suggestion, written out for a person.
+	//!
+	//! The same fields the Python reference prints, in the same order, so the
+	//! two can be read side by side while the port is being checked.
+	void print_key(const bpmcore::key_analysis & k, int year)
+	{
+		if (!k.ok)
+		{
+			std::printf("  no key: too short, or no pitched content\n");
+			return;
+		}
+
+		std::printf("  tuning   %+.1f cents   R=%.2f", k.tuning_cents, k.tuning_r);
+		if (!k.tuning_ok) std::printf("   [low tuning confidence]");
+		if (k.near_wrap) std::printf("   [near the semitone wrap - key may be a semitone out]");
+		std::printf("\n");
+
+		std::printf("  key      %-4s  (%s confidence, margin %.3f)\n",
+		            bpmcore::key_name(k.best.root, k.best.minor),
+		            bpmcore::key_confidence_name(k.confidence), k.margin);
+		std::printf("           candidates:");
+		for (int i = 0; i < k.candidate_count; i++)
+			std::printf("   %s %+.3f", bpmcore::key_name(k.candidates[i].root,
+			                                             k.candidates[i].minor),
+			            k.candidates[i].score);
+		std::printf("\n");
+		if (k.major_fraction >= 0)
+			std::printf("           mode over time: %.0f%% of %d windows major, "
+			            "%d switch(es)\n",
+			            100.0 * k.major_fraction, k.mode_windows, k.mode_switches);
+
+		bpmcore::retune_option opts[bpmcore::key_candidate_count];
+		const int n = bpmcore::suggest_retune(k.tuning_cents, year, opts,
+		                                      bpmcore::key_candidate_count);
+		if (n == 0)
+		{
+			std::printf("  retune   not suggested (year %d)\n", year);
+			return;
+		}
+		std::printf("  retune   (year %d)\n", year);
+		for (int i = 0; i < n; i++)
+			std::printf("    %d. %s %.2f%%   (%+.1f c from %s)\n", i + 1,
+			            opts[i].percent < 0 ? "slow down" : "speed up ",
+			            std::fabs(opts[i].percent), opts[i].cents,
+			            bpmcore::retune_target_name(opts[i].target));
+	}
+
+	int run_key(const char * path, int year, int threads)
+	{
+		std::vector<float> mono;
+		std::string error;
+		if (!decode_track(path, ffmpeg_path(), mono, error))
+		{
+			std::fprintf(stderr, "%s: %s\n", path, error.c_str());
+			return 2;
+		}
+		bpmcore::key_analysis k;
+		bpmcore::compute_key(mono.data(), mono.size(), bpmcore::odf_model_rate,
+		                     k, nullptr, threads);
+		std::printf("\n%s  (%.0fs)\n", path, k.duration);
+		print_key(k, year);
+		return k.ok ? 0 : 3;
+	}
+
+	//! Every track in a list file, one row each, for scoring a whole
+	//! collection against its discography data.
+	//!
+	//! The list may carry a year after a tab, which is what the retune
+	//! suggestion needs and what no amount of signal processing can supply.
+	int run_key_batch(const char * list_path, int threads)
+	{
+		std::ifstream in(list_path, std::ios::binary);
+		if (!in)
+		{
+			std::fprintf(stderr, "cannot open %s\n", list_path);
+			return 2;
+		}
+
+		std::vector<std::pair<std::string, int> > items;
+		std::string line;
+		while (std::getline(in, line))
+		{
+			if (!line.empty() && line.back() == '\r') line.pop_back();
+			if (items.empty() && line.compare(0, 3, "\xEF\xBB\xBF") == 0) line.erase(0, 3);
+			if (line.empty() || line[0] == '#') continue;
+			const std::size_t tab = line.find('\t');
+			if (tab == std::string::npos) items.push_back(std::make_pair(line, 0));
+			else items.push_back(std::make_pair(line.substr(0, tab),
+			                                    std::atoi(line.c_str() + tab + 1)));
+		}
+		if (items.empty())
+		{
+			std::fprintf(stderr, "%s lists no files\n", list_path);
+			return 2;
+		}
+
+		const std::string ffmpeg = ffmpeg_path();
+		std::fprintf(stderr, "%d tracks, %s precision, ffmpeg %s\n",
+		             static_cast<int>(items.size()), BPMCORE_TEST_SCALAR, ffmpeg.c_str());
+
+		std::printf("#path\tok\ttuning\tr\tkey\tcand1\tscore1\tcand2\tscore2\tcand3\tscore3"
+		            "\tmargin\tconfidence\tmajor_frac\tswitches\twindows\tyear\tretune\n");
+
+		int failed = 0;
+		std::vector<float> mono;
+		for (std::size_t i = 0; i < items.size(); i++)
+		{
+			std::string error;
+			bpmcore::key_analysis k;
+			if (!decode_track(items[i].first, ffmpeg, mono, error))
+			{
+				std::fprintf(stderr, "%s: %s\n", items[i].first.c_str(), error.c_str());
+				failed++;
+			}
+			else
+			{
+				bpmcore::compute_key(mono.data(), mono.size(), bpmcore::odf_model_rate,
+				                     k, nullptr, threads);
+				if (!k.ok) failed++;
+			}
+
+			bpmcore::retune_option opts[bpmcore::key_candidate_count];
+			const int n = k.ok ? bpmcore::suggest_retune(k.tuning_cents, items[i].second,
+			                                             opts, bpmcore::key_candidate_count)
+			                   : 0;
+			std::string retune;
+			for (int j = 0; j < n; j++)
+			{
+				char buf[64];
+				std::snprintf(buf, sizeof buf, "%s%+.2f%%@%s", j ? " " : "",
+				              opts[j].percent, bpmcore::retune_target_name(opts[j].target));
+				retune += buf;
+			}
+
+			std::printf("%s\t%d\t%.2f\t%.3f\t%s", items[i].first.c_str(), k.ok ? 1 : 0,
+			            k.tuning_cents, k.tuning_r,
+			            k.ok ? bpmcore::key_name(k.best.root, k.best.minor) : "-");
+			for (int j = 0; j < bpmcore::key_candidate_count; j++)
+				std::printf("\t%s\t%.4f",
+				            j < k.candidate_count
+				                ? bpmcore::key_name(k.candidates[j].root, k.candidates[j].minor)
+				                : "-",
+				            j < k.candidate_count ? k.candidates[j].score : 0.0);
+			std::printf("\t%.4f\t%s\t%.3f\t%d\t%d\t%d\t%s\n", k.margin,
+			            bpmcore::key_confidence_name(k.confidence),
+			            k.major_fraction, k.mode_switches, k.mode_windows,
+			            items[i].second, retune.c_str());
+			std::fflush(stdout);
+			if ((i + 1) % 25 == 0 || i + 1 == items.size())
+				std::fprintf(stderr, "\r%d/%d", static_cast<int>(i + 1),
+				             static_cast<int>(items.size()));
+		}
+		std::fprintf(stderr, "\n%d of %d tracks produced no key\n",
+		             failed, static_cast<int>(items.size()));
+		return 0;
+	}
+
+	//! A triad progression at a known detune, for the key self-test.
+	//!
+	//! Three partials a note, so the spectrum has something for the whitening
+	//! to flatten and for the peak picker to find above it, and a little noise
+	//! so the running median is measuring a background rather than zero.
+	void synth_progression(std::vector<float> & out, unsigned rate, double cents,
+	                       int transpose, const int * roots, int chords,
+	                       double chord_seconds)
+	{
+		const std::size_t n = static_cast<std::size_t>(chords * chord_seconds * rate);
+		out.assign(n, 0.0f);
+		const double detune = std::pow(2.0, (cents + 100.0 * transpose) / 1200.0);
+		// A deterministic hiss: a test that fails one run in twenty is worse
+		// than no test.
+		std::uint32_t seed = 12345;
+		for (int c = 0; c < chords; c++)
+		{
+			const std::size_t begin = static_cast<std::size_t>(c * chord_seconds * rate);
+			const std::size_t end = std::min(n, static_cast<std::size_t>(
+				(c + 1) * chord_seconds * rate));
+			// Major triad on the root, in the octave above middle C.
+			const int semis[3] = { roots[c], roots[c] + 4, roots[c] + 7 };
+			for (int v = 0; v < 3; v++)
+			{
+				// Pitch class `semis[v]` as a frequency, C4 = 261.6Hz.
+				const double f0 = 261.625565 * std::pow(2.0, semis[v] / 12.0) * detune;
+				for (int h = 1; h <= 3; h++)
+				{
+					const double f = f0 * h;
+					if (f > 0.45 * rate) break;
+					const double amp = 0.20 / h;
+					for (std::size_t i = begin; i < end; i++)
+						out[i] += static_cast<float>(
+							amp * std::sin(2.0 * test_pi * f * (i - begin) / rate));
+				}
+			}
+			for (std::size_t i = begin; i < end; i++)
+			{
+				seed = seed * 1664525u + 1013904223u;
+				out[i] += static_cast<float>(
+					1e-3 * (static_cast<double>(seed >> 8) / 8388608.0 - 1.0));
+			}
+		}
+	}
+
+	//! Tuning, key and retune, against signals whose answers are known.
+	//!
+	//! Synthesised here rather than read from disk, so this runs in CI with no
+	//! audio to hand. It cannot say whether the detector is any good on real
+	//! recordings - only the labelled collections can, and what they say is in
+	//! key-detection-feature-plan.md. What it checks is that the arithmetic
+	//! holds: that the offset comes back, that taking it out leaves the key
+	//! where it was, and that transposing the audio transposes the answer.
+	int run_key_synth()
+	{
+		int failures = 0, checks = 0;
+		auto check = [&](bool ok, const char * what)
+		{
+			checks++;
+			if (!ok) { std::fprintf(stderr, "key_synth: %s\n", what); failures++; }
+		};
+
+		// I-IV-V-I in C, twice round, with the relative minor for colour.
+		static const int progression[] = { 0, 5, 7, 0, 9, 5, 7, 0 };
+		const int chords = static_cast<int>(sizeof progression / sizeof *progression);
+
+		std::vector<float> x;
+		bpmcore::key_analysis k;
+
+		// The offset comes back, at every rate the analysis might see and at
+		// both ends of the range that matters - A=435 is -19.79 cents.
+		static const double detunes[] = { 0.0, -19.79, +31.0, -44.0 };
+		static const unsigned rates[] = { 22050, 44100 };
+		for (unsigned r = 0; r < sizeof rates / sizeof *rates; r++)
+		{
+			for (unsigned d = 0; d < sizeof detunes / sizeof *detunes; d++)
+			{
+				synth_progression(x, rates[r], detunes[d], 0, progression, chords, 4.0);
+				bpmcore::compute_key(x.data(), x.size(), rates[r], k, nullptr, 1);
+				if (!k.ok) { check(false, "synth produced no analysis"); continue; }
+				const double err = k.tuning_cents - detunes[d];
+				if (std::fabs(err) > 2.0)
+					std::fprintf(stderr, "key_synth: %uHz detune %+.2f read %+.2f\n",
+					             rates[r], detunes[d], k.tuning_cents);
+				check(std::fabs(err) <= 2.0, "tuning offset off by more than 2 cents");
+				check(k.tuning_r > 0.8, "tuning confidence low on a synthetic tone");
+			}
+		}
+
+		// Taking the offset out before binning is the step the whole thing
+		// rests on: the same music at three speeds has to give one key.
+		int root0 = -1;
+		bool minor0 = false;
+		for (unsigned d = 0; d < sizeof detunes / sizeof *detunes; d++)
+		{
+			synth_progression(x, 22050, detunes[d], 0, progression, chords, 4.0);
+			bpmcore::compute_key(x.data(), x.size(), 22050, k, nullptr, 1);
+			if (!k.ok) { check(false, "synth produced no key"); continue; }
+			if (d == 0) { root0 = k.best.root; minor0 = k.best.minor; continue; }
+			if (k.best.root != root0 || k.best.minor != minor0)
+				std::fprintf(stderr, "key_synth: detune %+.2f moved the key from %s to %s\n",
+				             detunes[d], bpmcore::key_name(root0, minor0),
+				             bpmcore::key_name(k.best.root, k.best.minor));
+			check(k.best.root == root0 && k.best.minor == minor0,
+			      "detuning the audio changed the key");
+		}
+		// A major-key progression should read major, and on C.
+		check(root0 == 0 && !minor0, "I-IV-V-I in C did not read as C major");
+
+		// And transposing the audio has to transpose the answer, which is what
+		// catches a pitch-class table that is rotated or reflected.
+		for (int t = 1; t <= 11; t++)
+		{
+			synth_progression(x, 22050, 0.0, t, progression, chords, 4.0);
+			bpmcore::compute_key(x.data(), x.size(), 22050, k, nullptr, 1);
+			if (!k.ok) { check(false, "transposed synth produced no key"); continue; }
+			const int want = (root0 + t) % 12;
+			if (k.best.root != want || k.best.minor != minor0)
+				std::fprintf(stderr, "key_synth: +%d semitones read %s, wanted %s\n",
+				             t, bpmcore::key_name(k.best.root, k.best.minor),
+				             bpmcore::key_name(want, minor0));
+			check(k.best.root == want && k.best.minor == minor0,
+			      "transposing the audio did not transpose the key");
+		}
+
+		// Threading cannot move the answer; the batch sweeps depend on it.
+		synth_progression(x, 22050, -19.79, 3, progression, chords, 4.0);
+		bpmcore::key_analysis one, many;
+		bpmcore::compute_key(x.data(), x.size(), 22050, one, nullptr, 1);
+		bpmcore::compute_key(x.data(), x.size(), 22050, many, nullptr, 4);
+		check(one.ok && many.ok && one.best.root == many.best.root
+		      && one.best.minor == many.best.minor
+		      && std::fabs(one.tuning_cents - many.tuning_cents) < 1e-9,
+		      "one thread and four gave different answers");
+
+		// Keys are spelt by their signature. Bb, not A#.
+		check(std::strcmp(bpmcore::key_name(10, false), "Bb") == 0, "Bb printed as A#");
+		check(std::strcmp(bpmcore::key_name(3, false), "Eb") == 0, "Eb printed as D#");
+		check(std::strcmp(bpmcore::key_name(7, true), "Gm") == 0, "Gm misspelt");
+		check(std::strcmp(bpmcore::key_name(0, true), "Cm") == 0, "Cm misspelt");
+
+		// A=435 is 19.79 cents flat, and correcting it means playing faster.
+		check(std::fabs(bpmcore::key_a435_offset() + 19.79) < 0.01, "A=435 is not -19.79c");
+		check(bpmcore::retune_percent(-19.79) > 1.14
+		      && bpmcore::retune_percent(-19.79) < 1.16,
+		      "correcting a flat transfer should speed it up about 1.15%");
+		check(std::fabs(bpmcore::retune_percent(0.0)) < 1e-12, "no offset, no correction");
+
+		// The era window, and what falls outside it.
+		bpmcore::retune_option opt[3];
+		check(bpmcore::suggest_retune(-19.8, 0, opt, 3) == 0, "no year, no suggestion");
+		check(bpmcore::suggest_retune(-19.8, 1976, opt, 3) == 0, "1976 is past the window");
+		check(bpmcore::suggest_retune(-19.8, 1975, opt, 3) > 0, "1975 is inside it");
+
+		// A 1938 side 19.8 cents flat is simply at A=435 and needs nothing.
+		int n = bpmcore::suggest_retune(-19.8, 1938, opt, 3);
+		check(n >= 1 && opt[0].target == bpmcore::retune_a435
+		      && std::fabs(opt[0].cents) < 1.0,
+		      "a 1938 side at A=435 should be left alone");
+		// The same measurement in 1950, when nobody was cutting at 435 any
+		// more, is a transfer running slow and wants speeding up.
+		n = bpmcore::suggest_retune(-19.8, 1950, opt, 3);
+		check(n >= 1 && opt[0].target == bpmcore::retune_a440 && opt[0].percent > 1.0,
+		      "a 1950 side 20 cents flat should be sped up to A=440");
+		// In the transition years both are offered, nearest first.
+		n = bpmcore::suggest_retune(-2.0, 1942, opt, 3);
+		check(n >= 2 && opt[0].target == bpmcore::retune_a440,
+		      "1942 at pitch should read as A=440 first, with A=435 behind it");
+		check(bpmcore::key_era_p435(1938) > 0.5 && bpmcore::key_era_p435(1944) < 0.5
+		      && bpmcore::key_era_p435(1950) == 0.0,
+		      "the era prior does not fall across the transition");
+
+		std::printf("key_synth: %d checks, %d failures\n", checks, failures);
+		return failures == 0 ? 0 : 1;
+	}
+
 	int run_model(const char * path)
 	{
 		std::ifstream in(path);
@@ -933,12 +1282,19 @@ int main(int argc, char ** argv)
 		                   argc >= 5 ? std::max(1, std::atoi(argv[4])) : 3,
 		                   argc >= 6 ? std::atoi(argv[5]) : 1);
 	if (mode == "fft_sizes") return run_fft_sizes();
+	if (mode == "key_synth") return run_key_synth();
+	if (mode == "key" && argc >= 3)
+		return run_key(argv[2], argc >= 4 ? std::atoi(argv[3]) : 0,
+		               argc >= 5 ? std::atoi(argv[4]) : 0);
+	if (mode == "key_batch" && argc >= 3)
+		return run_key_batch(argv[2], argc >= 4 ? std::atoi(argv[3]) : 0);
 	if (mode == "batch" && argc >= 3)
 		return run_batch(argv[2], argc >= 4 ? std::atoi(argv[3]) : 0);
 	if (mode == "bench" && argc >= 4)
 		return run_bench(argv[2], static_cast<unsigned>(std::atoi(argv[3])),
 		                 argc >= 5 ? std::max(1, std::atoi(argv[4])) : 3,
-		                 argc >= 6 ? std::atoi(argv[5]) : 0);
+		                 argc >= 6 ? std::atoi(argv[5]) : 0,
+		                 argc >= 7 ? std::atoi(argv[6]) != 0 : true);
 
 	std::fprintf(stderr,
 		"usage: bpmcore_test model <cases file>\n"
@@ -946,8 +1302,11 @@ int main(int argc, char ** argv)
 		"       bpmcore_test tempo_spread\n"
 		"       bpmcore_test pipeline <raw f32 mono file> <sample rate>\n"
 		"       bpmcore_test fft_sizes\n"
+		"       bpmcore_test key_synth\n"
+		"       bpmcore_test key <audio file> [year] [threads]\n"
+		"       bpmcore_test key_batch <list of audio files, tab, year> [threads]\n"
 		"       bpmcore_test batch <list of audio files> [threads]\n"
-		"       bpmcore_test bench <raw f32 mono file> <sample rate> [repeats]\n"
+		"       bpmcore_test bench <raw f32 mono file> <sample rate> [repeats] [threads] [key 0|1]\n"
 		"       bpmcore_test trajectory <raw f32 mono file> <sample rate>\n");
 	return 64;
 }

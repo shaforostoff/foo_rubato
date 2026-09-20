@@ -4,6 +4,63 @@ Rubato BPM Analyzer for foobar2000
 Change Log
 ----------
 
+### Unreleased
+
+* **Tuning and key detection**, off the decode the tempo analysis already
+  pays for. Three measurements, in increasing order of how far they can be
+  trusted: where the recording sits against A=440 in cents; what key it is in,
+  with two alternates and a confidence band; and - given the recording year -
+  what speed correction would put the transfer back on pitch.
+
+  The key detector is not accurate enough to present a single answer as fact,
+  and the tag schema says so rather than hiding it. `KEY` is right about 60%
+  of the time; the true key is among the three in `KEYCANDIDATES` 93% of the
+  time, and in the top confidence band every time. `KEYCONFIDENCE` says which
+  of those numbers applies to the track in hand. The three are written
+  together or not at all.
+
+  Everything was measured against TangoTunes' hand-made discography data -
+  58 Troilo sides with a hand-written recording key, 130 Biagi transfers with
+  a hand-set pitch - and not against another detector's output. The tuning is
+  the stronger of the two: a median error around 2 cents, and 98% correct at
+  recovering whether a transfer was made at A=435 or A=440 from the audio
+  alone. `key-detection-feature-plan.md` records how, and the eight
+  approaches that were tried and rejected along the way; three of those
+  looked convincing on one track and died against the labels.
+
+* The mode is decided by tracking rather than by the key profile's own answer.
+  A tango that is minor in the A section and major in the B section does not
+  change key signature - it swaps which of the signature's two tonics is in
+  charge - so the signature comes from the whole-track chroma and the mode
+  from a majority over 12-second windows. That lifts exact keys from 57% to
+  60% on the labelled sides, and the tonic alone from 71% to 74%;
+  `MODEBALANCE` reports what it found.
+
+* The retune suggestion needs the recording year, which no amount of signal
+  processing supplies; the component reads `ORIGINALDATE` first and falls back
+  to `DATE`. Because a measured offset is only known modulo a semitone, and
+  because through the 1939-1944 transition both reference pitches were in use,
+  there is more than one answer and `RETUNECANDIDATES` carries the rest. The
+  per-year priors are measured from 281 dated sides. Nothing is suggested for
+  a track with no year or one recorded from 1976 on.
+
+* Detection costs about as much again as the tempo analysis - a 196-second
+  side goes from 2000x realtime to 900x on one thread - which is still a
+  small fraction of what decoding it costs. It can be switched off on the
+  preferences page, along with each of the three groups of fields separately.
+
+* `bpm_track_result` replaces the parallel arrays the results window and the
+  tag writer were passed. There were six of them for the tempo alone, each
+  having to be sorted into the same order by hand with a `dynamic_assert`
+  standing in for the compiler; tuning and key would have made it a dozen.
+
+* Two new test cases. `key_synth` checks the tuning offset, the key and the
+  retune arithmetic against synthesised chords whose answers are known - that
+  the offset comes back, that taking it out leaves the key where it was, and
+  that transposing the audio transposes the answer at all twelve semitones.
+  `tag_format` checks the exact strings that reach people's files. Neither
+  needs any audio on disk.
+
 ### Version 0.1.0
 
 * **It runs on macOS.** `scripts/build_release_macos.sh` builds one universal

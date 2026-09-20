@@ -99,7 +99,7 @@ BEGIN
     PUSHBUTTON      "Cancel",IDCANCEL,338,221,50,14
 END
 
-IDD_BPM_PREFERENCES DIALOGEX 0, 0, 332, 152
+IDD_BPM_PREFERENCES DIALOGEX 0, 0, 332, 176
 STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD
 FONT 8, "MS Shell Dlg", 400, 0, 0x0
 BEGIN
@@ -118,11 +118,20 @@ BEGIN
     LTEXT           "Reset average pause",IDC_STATIC,175,44,70,8
     EDITTEXT        ID_CONFIG_SECONDS_TO_RESET_AVERAGE,251,42,54,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
     LTEXT           " s",IDC_STATIC,305,44,8,8
-    CONTROL         "Write analysis details to the console (tempo, rhythm, timings)",ID_CONFIG_OUTPUT_DEBUG,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,129,300,10
+    CONTROL         "Write analysis details to the console",ID_CONFIG_OUTPUT_DEBUG,
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,129,134,10
+    CONTROL         "Detect key and tuning",ID_CONFIG_DETECT_KEY,
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,176,99,140,10
+    CONTROL         "Write KEY and candidates",ID_CONFIG_WRITE_KEY,
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,176,114,140,10
+    CONTROL         "Write TUNING",ID_CONFIG_WRITE_TUNING,
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,176,129,140,10
+    CONTROL         "Write RETUNE",ID_CONFIG_WRITE_RETUNE,
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,176,144,140,10
     GROUPBOX        "Tagging",IDC_STATIC,6,6,150,102
     GROUPBOX        "Manual Analysis",IDC_STATIC,168,6,156,72
-    GROUPBOX        "Diagnostics",IDC_STATIC,6,114,318,30
+    GROUPBOX        "Tuning and key",IDC_STATIC,168,84,156,84
+    GROUPBOX        "Diagnostics",IDC_STATIC,6,114,150,30
 END
 
 IDD_BPM_MANUAL_DIALOG DIALOGEX 0, 0, 304, 130

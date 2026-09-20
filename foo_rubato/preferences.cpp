@@ -10,6 +10,18 @@ cfg_bool bpm_config_auto_write_tag(guid_bpm_config_auto_write_tag, false);
 // for someone who wants nothing in their files but the BPM itself.
 cfg_bool bpm_config_write_initial_bpm(guid_bpm_config_write_initial_bpm, true);
 cfg_bool bpm_config_write_bpm_algorithm(guid_bpm_config_write_bpm_algorithm, true);
+// Tuning and key. Detection is on by default: it roughly doubles the analysis,
+// which is still a small fraction of what decoding the track costs, and on
+// shellac transfers the tuning offset is the more useful of the two answers.
+//
+// The key is written by default too, but never as a bare fact - KEY is always
+// accompanied by KEYCANDIDATES and KEYCONFIDENCE, because the single answer is
+// right 60% of the time and a tag that does not say so is a tag that misleads.
+// Someone who wants only the tuning can turn the key off and keep it.
+cfg_bool bpm_config_detect_key(guid_bpm_config_detect_key, true);
+cfg_bool bpm_config_write_key(guid_bpm_config_write_key, true);
+cfg_bool bpm_config_write_tuning(guid_bpm_config_write_tuning, true);
+cfg_bool bpm_config_write_retune(guid_bpm_config_write_retune, true);
 // Diagnostics
 cfg_bool bpm_config_output_debug(guid_bpm_config_output_debug, false);
 // Manual
