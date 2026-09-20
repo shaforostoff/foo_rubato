@@ -5,9 +5,14 @@
 cfg_int bpm_config_bpm_precision(guid_bpm_config_bpm_precision, BPM_PRECISION_1);
 cfg_string bpm_config_bpm_tag(guid_bpm_config_bpm_tag, "BPM");
 cfg_bool bpm_config_auto_write_tag(guid_bpm_config_auto_write_tag, false);
-// Both on by default: a BPM this component measured should say so, and the
+// Both on by default: a measurement this component made should say so, and the
 // tempo a side opens at is one of the things it was taught to measure. Off is
 // for someone who wants nothing in their files but the BPM itself.
+//
+// The second governs both attributions, BpmAlgorithm and KeyAlgorithm. One
+// switch because it answers one question - whether this component's name
+// belongs in the file at all - and nobody answering no means it of the tempo
+// alone.
 cfg_bool bpm_config_write_initial_bpm(guid_bpm_config_write_initial_bpm, true);
 cfg_bool bpm_config_write_bpm_algorithm(guid_bpm_config_write_bpm_algorithm, true);
 // Tuning and key. Detection is on by default: it roughly doubles the analysis,

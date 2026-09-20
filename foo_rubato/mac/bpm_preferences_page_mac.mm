@@ -94,7 +94,7 @@ namespace
 	                                    action:@selector(onAutoWriteTagChanged:)];
 	_writeInitialBPM = [self checkboxWithTitle:@"Also write the tempo the track opens at, as INITIALBPM"
 	                                    action:@selector(onWriteInitialChanged:)];
-	_writeAlgorithm  = [self checkboxWithTitle:@"Also write which analysis produced the BPM, as BpmAlgorithm"
+	_writeAlgorithm  = [self checkboxWithTitle:@"Also write which analysis produced the BPM and the key, as BpmAlgorithm and KeyAlgorithm"
 	                                    action:@selector(onWriteAlgorithmChanged:)];
 
 	_detectKey   = [self checkboxWithTitle:@"Measure the tuning offset and the key"

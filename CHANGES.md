@@ -44,6 +44,17 @@ Change Log
   per-year priors are measured from 281 dated sides. Nothing is suggested for
   a track with no year or one recorded from 1976 on.
 
+* The key gets its own attribution, `KeyAlgorithm`, carrying the same
+  `Rubato;v=<version>` the BPM's does and named the way other taggers already
+  name it. Two fields rather than one because the two measurements are
+  overruled separately: doubling a BPM in the results window says nothing
+  about the key beside it, and a track with no steady pitch in it still
+  produced a BPM worth attributing. It stands behind a `KEY` this scan wrote
+  and nothing else, so a rescan that measures none removes it along with the
+  key fields rather than leaving credit behind for a field that is no longer
+  there. The preferences checkbox now reads *Write BpmAlgorithm and
+  KeyAlgorithm* and governs both.
+
 * Detection costs more than the tempo analysis itself - a 196-second side goes
   from 3200x realtime to 1300x on one thread - which is still a small fraction
   of what decoding it costs. It can be switched off on the

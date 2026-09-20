@@ -26,6 +26,11 @@ bool file_info_filter_scale_bpm::apply_filter(metadb_handle_ptr p_track, t_files
 
 		// Doubling or halving is the user overruling the measurement, so the
 		// analysis no longer stands behind the value and its attribution goes.
+		//
+		// The BPM's attribution, and only that one. KeyAlgorithm is left where
+		// it is: a metrical level corrected by hand says nothing about the key
+		// beside it, which is still the key the analysis measured, and this is
+		// the whole reason the two attributions are separate fields.
 		p_info.meta_remove_field(BPM_ALGORITHM_TAG);
 
 		// The opening tempo is quoted at the same metrical level as the BPM, so

@@ -101,13 +101,27 @@ bool file_info_filter_bpm::apply_filter(metadb_handle_ptr p_track, t_filestats p
 	// The key, and - always beside it - how far to trust it. KEY on its own
 	// reads as a fact; it is right 60% of the time, and the two fields that
 	// say so travel with it or none of them is written.
-	set_or_remove(p_info, BPM_KEY_TAG, bpm_format_key(r.key), m_write_key);
+	const pfc::string8 key_name = bpm_format_key(r.key);
+	set_or_remove(p_info, BPM_KEY_TAG, key_name, m_write_key);
 	set_or_remove(p_info, BPM_KEY_CANDIDATES_TAG,
 	              bpm_format_key_candidates(r.key), m_write_key);
 	set_or_remove(p_info, BPM_KEY_CONFIDENCE_TAG,
 	              bpm_format_key_confidence(r.key), m_write_key);
 	set_or_remove(p_info, BPM_MODE_BALANCE_TAG,
 	              bpm_format_mode_balance(r.key), m_write_key);
+
+	// The key's own attribution, on the same terms as the BPM's above: stamped
+	// only where this component stands behind the value beside it, and removed
+	// rather than left standing anywhere it does not.
+	//
+	// What it stands behind here is a KEY this scan actually wrote. A track
+	// with no steady pitch in it measures no key, and with the key fields
+	// switched off none is written, and in both cases KEY has just been removed
+	// - so an attribution for it would be claiming credit either for a field
+	// that is not there or for one some other tagger put there.
+	const bool key_ours = m_write_key && !key_name.is_empty();
+	if (!key_ours) p_info.meta_remove_field(BPM_KEY_ALGORITHM_TAG);
+	else if (m_write_algorithm) p_info.meta_set(BPM_KEY_ALGORITHM_TAG, FOO_RUBATO_ALGORITHM);
 
 	set_or_remove(p_info, BPM_TUNING_TAG, bpm_format_tuning(r.key), m_write_tuning);
 

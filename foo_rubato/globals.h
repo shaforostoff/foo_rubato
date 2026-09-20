@@ -5,13 +5,21 @@
 #include <SDK/advconfig_impl.h>
 #include "guid.h"
 
-// The tag recording which analysis produced the BPM, and its version. Unlike
-// the BPM and rhythm tag names this one is not configurable: it is an
-// attribution rather than a place to put data, and a reader looking for it
-// has to know what it is called. The value is FOO_RUBATO_ALGORITHM, from the
-// generated version.h. Named to match the KeyAlgorithm and TuningAlgorithm
-// fields other taggers write.
-#define BPM_ALGORITHM_TAG "BpmAlgorithm"
+// The tags recording which analysis produced a measurement, and its version.
+// Unlike the BPM and rhythm tag names these are not configurable: they are an
+// attribution rather than a place to put data, and a reader looking for one
+// has to know what it is called. Both carry FOO_RUBATO_ALGORITHM, from the
+// generated version.h - one component and one version, whichever of the two
+// measurements is being stamped. Named to match the KeyAlgorithm and
+// TuningAlgorithm fields other taggers write.
+//
+// Two fields rather than one because the two measurements are overruled
+// separately. Doubling a BPM in the results window says nothing about the key
+// beside it, and a track with no steady pitch in it still produced a BPM worth
+// attributing, so one attribution covering both would be wrong about one of
+// them every time either is.
+#define BPM_ALGORITHM_TAG     "BpmAlgorithm"
+#define BPM_KEY_ALGORITHM_TAG "KeyAlgorithm"
 
 // The tempo the track opens at, beside the BPM for the whole of it. Named
 // after the INITIALKEY field other taggers write; foobar2000 chooses the

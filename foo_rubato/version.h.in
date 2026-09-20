@@ -7,7 +7,7 @@
 // CMakeLists.txt. It used to be typed out again in DECLARE_COMPONENT_VERSION,
 // and the two had already drifted by a patch level - the about box said 0.4.1
 // while the release it shipped in was 0.4.2. Three readers now share this
-// header: the about box, the BpmAlgorithm tag stamped into every analysed
+// header: the about box, the attribution tags stamped into every analysed
 // file, and scripts\build_release.ps1, which reads the version straight out of
 // CMakeLists.txt to name the archive.
 
@@ -20,10 +20,12 @@
 // copies, and only one of them updated when the SDK moved.
 #define FOO_RUBATO_SDK_VERSION "@FOO_RUBATO_SDK_VERSION@"
 
-// The value written to the BpmAlgorithm tag: which analysis produced the BPM,
-// and which version of it. Formatted like the KeyAlgorithm and TuningAlgorithm
-// fields other taggers write - "<name>;v=<version>" - so one parser reads all
-// of them, and so further semicolon-delimited parameters could be appended
-// later without breaking a reader that only wants the name.
+// The value written to the BpmAlgorithm and KeyAlgorithm tags: which analysis
+// produced the measurement, and which version of it. One string for both, the
+// two fields being two measurements out of one component and one build.
+// Shaped the way other taggers shape theirs - "<name>;v=<version>" - so one
+// parser reads these and TuningAlgorithm alike, and so further
+// semicolon-delimited parameters could be appended later without breaking a
+// reader that only wants the name.
 #define FOO_RUBATO_ALGORITHM_NAME "Rubato"
 #define FOO_RUBATO_ALGORITHM      FOO_RUBATO_ALGORITHM_NAME ";v=" FOO_RUBATO_VERSION

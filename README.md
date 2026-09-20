@@ -150,8 +150,9 @@ Everything the analysis needs is fixed by the model it was fitted to, so what
 is left on the preferences page is what a user would actually choose:
 
 * **Tagging** - the BPM precision, the BPM tag name, whether to write tags
-  without showing the results window, and whether to write `INITIALBPM` and
-  `BpmAlgorithm` beside the BPM. The last two are on by default.
+  without showing the results window, whether to write `INITIALBPM` beside the
+  BPM, and whether to write the `BpmAlgorithm` and `KeyAlgorithm` attributions
+  at all. The last two are on by default.
 * **Tuning and key** - whether to measure the tuning offset and the key at
   all, and which of `KEY`, `TUNING` and `RETUNE` to write. All four are on by
   default. Turning detection off greys the other three and saves about half
@@ -328,7 +329,9 @@ which records what produced the number. Both the field name and the
 fields other taggers write, so one parser reads all three. It is not
 configurable - a reader looking for an attribution has to know what it is
 called - and the version comes from `project(VERSION)` in `CMakeLists.txt`,
-which is the only place the version is written down.
+which is the only place the version is written down. The key carries its own
+attribution under that same `KeyAlgorithm` name, on the same terms; it is in
+*Tuning and key* below, because what it stands behind is measured there.
 
 Only a BPM the analysis stands behind is stamped. All three ways of overruling
 it *remove* the field instead - tapping a BPM by hand in the manual dialog,
@@ -341,12 +344,12 @@ tell a measured BPM from a corrected or hand-tapped one.
 Both fields can be turned off under **Tagging** on the preferences page, and
 both are on by default. Off means this component stops *adding* the field - not
 that it starts leaving a claim it knows to be false. Removal is unconditional:
-uncheck *Write BpmAlgorithm*, tap a BPM by hand over one that was measured, and
-the old attribution still goes, because the alternative is a file saying the
-analysis produced a number the user typed. The same holds for `INITIALBPM`,
-where a stale value would describe a different measurement from the BPM beside
-it. What the switches do cost is the reverse inference: with *Write
-BpmAlgorithm* off, a missing attribution no longer means the BPM was tapped,
+uncheck *Write BpmAlgorithm and KeyAlgorithm*, tap a BPM by hand over one that
+was measured, and the old attribution still goes, because the alternative is a
+file saying the analysis produced a number the user typed. The same holds for
+`INITIALBPM`, where a stale value would describe a different measurement from
+the BPM beside it. What the switches do cost is the reverse inference: with the
+attribution off, a missing `BpmAlgorithm` no longer means the BPM was tapped,
 only that nothing wrote one.
 
 `INITIALBPM` follows the BPM rather than the attribution, because it is a
@@ -383,6 +386,22 @@ and it is not one.
 `MODEBALANCE` is which of the relative pair was in charge and how often it
 changed hands. That is not a key change: a tango with a minor A section and a
 major B section keeps one key signature throughout.
+
+An eighth field records the attribution rather than a measurement:
+
+    KeyAlgorithm = Rubato;v=<version>
+
+the same value as `BpmAlgorithm`, one component and one build stamping both,
+and under the name other taggers already use for it. There are two fields
+because the two measurements are overruled separately - doubling a BPM in the
+results window says nothing about the key beside it, and a track with no
+steady pitch in it still produced a BPM worth attributing, so one attribution
+covering both would be wrong about one of them every time either is. What
+`KeyAlgorithm` stands behind is specifically a `KEY` this scan wrote: where
+none was measured, or where the key fields are switched off, it is removed
+along with them rather than left claiming credit for a field that is not there
+or for one another tagger put there. Both attributions share the *Write
+BpmAlgorithm and KeyAlgorithm* checkbox under **Tagging**.
 
 `TUNING` is cents from A=440, matching the field beaTunes already writes, so
 both can sit in one library. It is a good deal more reliable than the key -

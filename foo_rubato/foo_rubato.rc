@@ -111,8 +111,8 @@ BEGIN
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,59,130,10
     CONTROL         "Write INITIALBPM",ID_CONFIG_WRITE_INITIAL_BPM,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,74,130,10
-    CONTROL         "Write BpmAlgorithm",ID_CONFIG_WRITE_BPM_ALGORITHM,
-                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,89,130,10
+    CONTROL         "Write BpmAlgorithm and KeyAlgorithm",ID_CONFIG_WRITE_BPM_ALGORITHM,
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,89,136,10
     LTEXT           "Taps to average",IDC_STATIC,175,26,54,8
     EDITTEXT        ID_CONFIG_TAPS_TO_AVERAGE,251,24,54,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
     LTEXT           "Reset average pause",IDC_STATIC,175,44,70,8
