@@ -13,11 +13,17 @@ Change Log
   what speed correction would put the transfer back on pitch.
 
   The key detector is not accurate enough to present a single answer as fact,
-  and the tag schema says so rather than hiding it. `KEY` is right about 60%
-  of the time; the true key is among the three in `KEYCANDIDATES` 93% of the
-  time, and in the top confidence band every time. `KEYCONFIDENCE` says which
-  of those numbers applies to the track in hand. The three are written
-  together or not at all.
+  and the tag schema says so rather than hiding it. `KEY` is right about 69%
+  of the time and names the right tonic 79% of the time; the true key is among
+  the three in `KEYCANDIDATES` 91% of the time. The three are written together
+  or not at all.
+
+  `KEYCONFIDENCE` is the weak part and is known to be. Its bands were fitted
+  against the older background window and no longer rank: on the labelled
+  sides the bottom band is now 74% exact against the middle band's 43%. They
+  have been left as they are rather than refitted, because those 58 sides are
+  the whole of the evidence and no second discography carries a key column to
+  check a new threshold against. Read the candidate list, not the band.
 
   Everything was measured against TangoTunes' hand-made discography data -
   58 Troilo sides with a hand-written recording key, 130 Biagi transfers with
@@ -32,9 +38,27 @@ Change Log
   A tango that is minor in the A section and major in the B section does not
   change key signature - it swaps which of the signature's two tonics is in
   charge - so the signature comes from the whole-track chroma and the mode
-  from a majority over 12-second windows. That lifts exact keys from 57% to
-  60% on the labelled sides, and the tonic alone from 71% to 74%;
-  `MODEBALANCE` reports what it found.
+  from a majority over 12-second windows. That lifts exact keys from 67% to
+  69% on the labelled sides, and the tonic alone from 78% to 79%;
+  `MODEBALANCE` reports what it found. It was worth three times that before
+  the background window became a pitch width - a cleaner chroma settles more
+  of the mode on its own.
+
+* The background each spectral bin is divided by is measured over a fixed
+  distance in pitch rather than a fixed 134.6Hz. The old window was 33
+  semitones wide at the bottom of the search band and 2.1 at the top, where
+  it was narrower than the spacing it was meant to measure against; it was
+  only about right around 1400Hz. Holding it at 3.17 semitones instead -
+  nnls-chroma's figure, taken from there rather than fitted here - is worth
+  60% to 69% exact and 74% to 79% on the tonic, gaining five labelled sides
+  and losing none, for about 4ms a track. Three of the five gains were the
+  classic error of reading a fifth above the true tonic, which is what a
+  background window that wide at the bottom of the band was feeding.
+
+  Opening the band itself was measured too, and does not work here: raising
+  the ceiling to 3520Hz is significantly worse, and reaching below 180Hz
+  needs a window over twice as long, at which point it straddles two beats at
+  tango tempo and mixes the chords either side - 60% falls to 47%.
 
 * The retune suggestion needs the recording year, which no amount of signal
   processing supplies; the component reads `ORIGINALDATE` first and falls back

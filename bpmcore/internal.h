@@ -136,7 +136,9 @@ extern const double key_window_seconds;
 extern const double key_hop_seconds;
 extern const double key_fmin_hz;
 extern const double key_fmax_hz;
-extern const double key_whiten_half_hz;
+//! Half the width of the background window, in semitones rather than in Hz:
+//! a fixed Hz width is 33 semitones at the bottom of the band and 2 at the top.
+extern const double key_whiten_half_semitones;
 //! Confidence bands for the correlation margin, and the point past which the
 //! tuning offset is too near the semitone wrap to trust the key.
 extern const double key_margin_high;

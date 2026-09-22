@@ -18,9 +18,16 @@
 //            is the retune suggestion's job, not this stage's.
 //   key      the whole-track chroma correlated against the Albrecht and
 //            Shanahan profiles over all 24 keys, with the mode then settled
-//            separately by tracking. Right 60% of the time, with the true key
-//            among the three candidates 93% of the time, which is why the
+//            separately by tracking. Right 69% of the time, with the true key
+//            among the three candidates 91% of the time, which is why the
 //            candidates are reported rather than thrown away.
+//
+//            Note that the margin no longer sorts those two apart the way it
+//            did: on the labelled sides the bottom third by margin is now 75%
+//            exact against the middle third's 47%, so `confidence` is reporting
+//            a band that does not rank. The thresholds are left where they are
+//            rather than refitted, because 58 sides is the whole of the
+//            evidence and no second discography carries a key column.
 //   retune   the era target and its semitone wraps, ranked.
 //
 // Every figure here was measured against TangoTunes' hand-made discography
@@ -44,14 +51,44 @@ const double key_hop_seconds    = 2048.0 / 22050.0;   //  92.9ms
 
 // Bandoneon and violin fundamentals through their first few harmonics. Below
 // this is turntable rumble; above it, on a 78, mostly surface noise.
+//
+// The floor is not free to move. A semitone at 180Hz is 10.7Hz, which at this
+// window is four bins - the width of the Hann main lobe - so below it peak
+// picking cannot separate two semitones at all. Reaching the bass would mean a
+// window over twice as long, and that was measured: at 743ms the whole thing
+// falls to 47% exact from 60%, band unchanged, because a window that long
+// straddles two beats at tango tempo and mixes the chords either side. Opening
+// the ceiling to 3520Hz is worse too - it spends the peak budget on surface
+// noise. Both directions are in the record; neither is an oversight.
 const double key_fmin_hz = 180.0;
 const double key_fmax_hz = 2200.0;
 
-// Half the width of the running median the spectrum is divided by, which at
-// the model geometry is 50 bins either side of centre - a 101-bin filter.
-// Flattening the shellac rolloff this way is what makes peak picking work on a
-// 78 at all: without it every peak found is in the bottom two octaves.
-const double key_whiten_half_hz = 50.0 * 22050.0 / 8192.0;   // 134.6Hz
+// Half the width of the running median the spectrum is divided by, as a
+// distance in pitch rather than in Hz. Flattening the shellac rolloff this way
+// is what makes peak picking work on a 78 at all: without it every peak found
+// is in the bottom two octaves.
+//
+// It used to be a fixed 134.6Hz, which is a different thing entirely at each
+// end of the band - 33 semitones wide at 180Hz, and 2.1 at 2200Hz, where it is
+// narrower than the spacing it is supposed to be measuring against. It was
+// right only around 1400Hz. Holding it at a fixed pitch width instead is worth
+// 60.3% -> 69.0% exact and 74.1% -> 79.3% on the tonic over the 58 labelled
+// Troilo sides, gaining five and losing none.
+//
+// 3.17 semitones is nnls-chroma's own whitening window (19 bins at three per
+// semitone), taken from there rather than fitted here - which matters, because
+// a sweep over this collection puts its best cell at exactly that value and a
+// sweep of twelve cells on 58 tracks would find a best cell anywhere. What the
+// sweep does support is the weaker claim: at 3.17, 4.0, 6.0 and 9.0 semitones
+// the change never loses a side and gains three to five, while below about 2.5
+// it is worse than the fixed width was. The size of the gain is not
+// established; its sign is.
+const double key_whiten_half_semitones = 3.17;
+
+// Never narrower than this, whatever the rate and window make of the figure
+// above. A partial is four bins wide, so a window much under this would divide
+// a peak by a median that the peak itself dominates and whiten it away.
+const int key_whiten_min_bins = 12;
 
 // A local maximum counts as a sinusoid at this multiple of the whitened
 // background, and at most this many are kept per frame - enough for a chord
@@ -71,6 +108,10 @@ const double key_mode_hop_seconds = 3.0;
 
 const double key_tuning_min_r = 0.25;
 const double key_wrap_warn_cents = 45.0;
+// Fitted against the fixed-Hz background window, and no longer ranking under
+// the pitch-width one - see the note at the top of the file. Left alone on
+// purpose: refitting them would be refitting them on the only 58 sides there
+// are to test against.
 const double key_margin_high = 0.104;
 const double key_margin_medium = 0.040;
 const double key_retune_max_cents = 60.0;
@@ -88,6 +129,14 @@ const double key_profile_minor[12] =
 // A=435 against A=440, in cents. Not a constant expression while this target
 // still offers to build as C++11, so it is computed once at load.
 const double key_a435_cents = -1200.0 * std::log(440.0 / 435.0) / std::log(2.0);
+
+// The background window as a fraction of the centre frequency. A span of
+// +/-s semitones reaches further above a bin than below it, so the symmetric
+// window the median slides over takes the average of the two - the difference
+// is under a bin at the bottom of the band and immaterial to a median anyway.
+const double key_whiten_frac =
+	0.5 * ((std::pow(2.0, key_whiten_half_semitones / 12.0) - 1.0) +
+	       (1.0 - std::pow(2.0, -key_whiten_half_semitones / 12.0)));
 
 namespace
 {
@@ -188,6 +237,24 @@ namespace
 		std::vector<float> m_sorted;
 	};
 
+	//! Half the width of the background window at `bin`, in bins.
+	//!
+	//! Held constant within each octave rather than recomputed per bin, which
+	//! is what keeps the sliding median affordable: the window is rebuilt once
+	//! per octave and slid everywhere else. Inside an octave the width is up to
+	//! 41% away from the figure a per-bin calculation would give, which for a
+	//! median of a few hundred noise bins is not a distinction that survives
+	//! being measured.
+	int whiten_half_bins(int bin, int nfft, unsigned rate)
+	{
+		const double f = static_cast<double>(bin) * rate / nfft;
+		const double octave = std::floor(std::log(f / key_fmin_hz) / std::log(2.0));
+		const double centre = key_fmin_hz * std::pow(2.0, octave + 0.5);
+		const int h = static_cast<int>(
+			std::lround(centre * key_whiten_frac * nfft / rate));
+		return h > key_whiten_min_bins ? h : key_whiten_min_bins;
+	}
+
 	//! Everything the per-frame loop needs that does not change between frames.
 	struct key_plan
 	{
@@ -198,8 +265,9 @@ namespace
 		int nfft = 0;
 		int nbin = 0;
 		int lo = 0, hi = 0;      //!< bins the peak search runs over, [lo, hi)
-		int half = 0;            //!< running-median half width, in bins
-		int ext_len = 0;         //!< (hi - lo) + 2 * half
+		const int * half_at = nullptr;   //!< median half width per bin of [lo, hi)
+		int max_half = 0;        //!< the widest of those, which sets the reach
+		int ext_len = 0;         //!< (hi - lo) + 2 * max_half
 		unsigned rate = 0;
 		const double * window = nullptr;
 		int max_peaks = 0;
@@ -255,7 +323,7 @@ namespace
 			const fft_cpx * bins = m_fft.bins();
 			for (int i = 0; i < p.ext_len; i++)
 			{
-				int k = p.lo - p.half + i;
+				int k = p.lo - p.max_half + i;
 				if (k < 0) k = 0;
 				else if (k >= p.nbin) k = p.nbin - 1;
 				const double re = bins[k].r, im = bins[k].i;
@@ -265,13 +333,27 @@ namespace
 			// Divide by the running median: what is left is how far each bin
 			// stands above its own neighbourhood, which is flat across the
 			// spectrum however steeply the transfer rolls off.
+			//
+			// The neighbourhood is a fixed distance in pitch, so it widens with
+			// frequency. It changes once an octave, and the median is rebuilt
+			// there and slid between - a handful of sorts per frame against the
+			// several hundred slides they save.
 			const int span = p.hi - p.lo;
-			m_median.reset(m_ext.data(), 2 * p.half + 1);
-			m_white[0] = m_ext[p.half] / m_median.median();
-			for (int j = 1; j < span; j++)
+			int cur_half = -1;
+			for (int j = 0; j < span; j++)
 			{
-				m_median.slide(m_ext[j - 1], m_ext[j + 2 * p.half]);
-				m_white[j] = m_ext[p.half + j] / m_median.median();
+				const int h = p.half_at[j];
+				const int centre = p.max_half + j;
+				if (h != cur_half)
+				{
+					m_median.reset(m_ext.data() + centre - h, 2 * h + 1);
+					cur_half = h;
+				}
+				else
+				{
+					m_median.slide(m_ext[centre - h - 1], m_ext[centre + h]);
+				}
+				m_white[j] = m_ext[centre] / m_median.median();
 			}
 
 			// Local maxima clear of the background. The interpolation reads the
@@ -284,9 +366,9 @@ namespace
 			{
 				const float w = m_white[j];
 				if (!(w > m_white[j - 1] && w > m_white[j + 1] && w > key_peak_floor)) continue;
-				const double a = m_ext[p.half + j - 1];
-				const double b = m_ext[p.half + j];
-				const double c = m_ext[p.half + j + 1];
+				const double a = m_ext[p.max_half + j - 1];
+				const double b = m_ext[p.max_half + j];
+				const double c = m_ext[p.max_half + j + 1];
 				const double den = a - 2 * b + c;
 				double d = 0;
 				if (std::fabs(den) > 1e-12) d = 0.5 * (a - c) / den;
@@ -538,11 +620,22 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 	plan.max_peaks = key_peaks_per_frame;
 	plan.lo = static_cast<int>(key_fmin_hz * nfft / sample_rate);
 	plan.hi = static_cast<int>(key_fmax_hz * nfft / sample_rate);
-	plan.half = static_cast<int>(std::lround(key_whiten_half_hz * nfft / sample_rate));
 	if (plan.hi > nbin) plan.hi = nbin;
-	if (plan.half < 1) plan.half = 1;
-	if (plan.hi - plan.lo < 4 || plan.half * 2 + 1 > nbin) return false;
-	plan.ext_len = (plan.hi - plan.lo) + 2 * plan.half;
+	if (plan.hi - plan.lo < 4) return false;
+
+	// The background width per bin, and the widest of them, which is how far
+	// past each end of the band the magnitudes have to be gathered.
+	std::vector<int> half_at(static_cast<std::size_t>(plan.hi - plan.lo));
+	plan.max_half = 1;
+	for (int j = 0; j < plan.hi - plan.lo; j++)
+	{
+		const int h = whiten_half_bins(plan.lo + j, nfft, sample_rate);
+		half_at[j] = h;
+		if (h > plan.max_half) plan.max_half = h;
+	}
+	if (plan.max_half * 2 + 1 > nbin) return false;
+	plan.half_at = half_at.data();
+	plan.ext_len = (plan.hi - plan.lo) + 2 * plan.max_half;
 
 	std::vector<float> rms;
 	frame_rms(mono, frames, nfft, hop, rms, threads);
@@ -714,6 +807,11 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 	// separates major from minor at r = +0.59 - 80% correct against a 52%
 	// majority-guess baseline - and lifts exact keys from 57% to 60% and the
 	// tonic alone from 71% to 74%.
+	//
+	// Both of those were measured before the background window became a pitch
+	// width. Re-measured after it, the tracking is worth less but still worth
+	// having: 67.2% to 69.0% exact, 77.6% to 79.3% on the tonic. A cleaner
+	// chroma settles more of the mode by itself.
 	//
 	// Windows of the chroma already accumulated, rather than a second spectral
 	// pass over the audio: the frames are the same frames, so this costs two
