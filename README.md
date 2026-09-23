@@ -375,11 +375,10 @@ fields rather than two because neither is certain enough to state as a fact:
     RETUNECANDIDATES   +0.00%@A=435 +1.15%@A=440
 
 `KEY` is the single best guess, so that a player or a DJ tool sees something
-usable. It is right about 60% of the time. `KEYCANDIDATES` is where most of
-what was measured actually is: the true key is somewhere in those three 93% of
-the time, and in the top confidence band every time. `KEYCONFIDENCE` says
-which of those numbers applies - in the `high` band the single answer is right
-86% of the time, in `low` it is right 42% of the time. The three travel
+usable. It is right about 79% of the time. `KEYCANDIDATES` is where the rest
+of what was measured is: the true key is somewhere in those three 95% of the
+time. `KEYCONFIDENCE` says which of those numbers applies - in the `high` band
+the single answer is right 89% of the time, in `medium` and `low` 64%. The three travel
 together or none of them is written, because `KEY` on its own reads as a fact
 and it is not one.
 

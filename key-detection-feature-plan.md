@@ -26,7 +26,7 @@ Three independent measurements, in increasing order of how much you can trust th
 |---|---|---|
 | **Tuning** | cents from A=440, plus a confidence `R` | median error **2.2 c** at A=435 and **1.7 c** at A=440; recovers which reference the transfer was made at **98%** of the time |
 | **Retune** | up to 3 ranked speed corrections | era priors calibrated from 281 hand-set transfer pitches; the first candidate names the right reference **98%** of the time |
-| **Key** | best guess + 2 alternates + confidence | **60%** exact, **74%** tonic, **93%** within the three candidates |
+| **Key** | best guess + 2 alternates + confidence | **79%** exact, **93%** tonic, **95%** within the three candidates (was 60 / 74 / 93 at first ship; see 3.2) |
 
 The key detector is not accurate enough to present a single answer as fact. It is
 accurate enough to be useful if the UI is honest about that, which is what the tag schema
@@ -85,6 +85,14 @@ pitch-class binning below becomes unstable and the key can land a semitone out.
 `pc = round((1200·log2(f/440) − offset)/100) + 9 (mod 12)`, accumulated with
 `log1p(magnitude)` weights. **Subtract the measured offset before binning** — this is the
 step that makes key detection work on off-speed transfers.
+
+**Harmonic attribution** (added later): within a frame, a peak at 3, 5, 6, 7 or 1.5 times a
+stronger lower peak (±30 cents) is binned at that peak's pitch class. 69.0% → 79.3% exact,
+79.3% → 93.1% tonic on the 58 Troilo sides (8 gained, 2 lost), and agreement with
+nnls-chroma's treble chroma over 766 TangoTunes tracks 74.4% → 91.6%. nnls-chroma itself
+scores 81.0% / 93.1% on the same labels, so this closes nearly all of the gap to it at a
+fraction of the cost. Including 5:4 was measured and rejected: 62 tracks nnls reads major
+turn parallel minor.
 
 ### 3.3 Key
 

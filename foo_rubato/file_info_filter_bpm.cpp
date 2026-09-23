@@ -99,7 +99,7 @@ bool file_info_filter_bpm::apply_filter(metadb_handle_ptr p_track, t_filestats p
 	if (!m_from_analysis) return true;
 
 	// The key, and - always beside it - how far to trust it. KEY on its own
-	// reads as a fact; it is right 60% of the time, and the two fields that
+	// reads as a fact; it is right 79% of the time, and the two fields that
 	// say so travel with it or none of them is written.
 	const pfc::string8 key_name = bpm_format_key(r.key);
 	set_or_remove(p_info, BPM_KEY_TAG, key_name, m_write_key);

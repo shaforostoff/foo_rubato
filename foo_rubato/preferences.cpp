@@ -21,7 +21,7 @@ cfg_bool bpm_config_write_bpm_algorithm(guid_bpm_config_write_bpm_algorithm, tru
 //
 // The key is written by default too, but never as a bare fact - KEY is always
 // accompanied by KEYCANDIDATES and KEYCONFIDENCE, because the single answer is
-// right 60% of the time and a tag that does not say so is a tag that misleads.
+// right 79% of the time and a tag that does not say so is a tag that misleads.
 // Someone who wants only the tuning can turn the key off and keep it.
 cfg_bool bpm_config_detect_key(guid_bpm_config_detect_key, true);
 cfg_bool bpm_config_write_key(guid_bpm_config_write_key, true);

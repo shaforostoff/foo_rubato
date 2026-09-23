@@ -18,16 +18,15 @@
 //            is the retune suggestion's job, not this stage's.
 //   key      the whole-track chroma correlated against the Albrecht and
 //            Shanahan profiles over all 24 keys, with the mode then settled
-//            separately by tracking. Right 69% of the time, with the true key
-//            among the three candidates 91% of the time, which is why the
-//            candidates are reported rather than thrown away.
+//            separately by tracking. Right 79% of the time and on the right
+//            tonic 93%, with the true key among the three candidates 95% of
+//            the time, which is why the candidates are reported rather than
+//            thrown away.
 //
-//            Note that the margin no longer sorts those two apart the way it
-//            did: on the labelled sides the bottom third by margin is now 75%
-//            exact against the middle third's 47%, so `confidence` is reporting
-//            a band that does not rank. The thresholds are left where they are
-//            rather than refitted, because 58 sides is the whole of the
-//            evidence and no second discography carries a key column.
+//            The margin ranks again since harmonics are attributed to their
+//            fundamentals: top third by margin 100% exact, middle 74%, bottom
+//            63%. The thresholds themselves are still the ones fitted before
+//            either of the last two changes and have not been refitted.
 //   retune   the era target and its semitone wraps, ranked.
 //
 // Every figure here was measured against TangoTunes' hand-made discography
@@ -96,6 +95,46 @@ const int key_whiten_min_bins = 12;
 const double key_peak_floor = 3.0;
 const int key_peaks_per_frame = 16;
 
+// Frequency ratios at which a peak is taken to be a harmonic of a stronger
+// peak below it, and counted at that peak's pitch class instead of its own.
+//
+// A bandoneon or piano note puts real energy in its 3rd harmonic, which is a
+// fifth up, and its 5th, a major third up. Peak picking counts those as notes
+// played, and that is where the fifth-above error comes from: 11 of the 23
+// Troilo misses before this. nnls-chroma handles it with a harmonic
+// dictionary and a non-negative least-squares fit per frame. This is a far
+// cheaper approximation of the same idea - a pairwise check over at most
+// sixteen peaks.
+//
+// 3, 5, 6 and 7 are harmonics that land on another pitch class (2, 4 and 8
+// are octaves and land on the same one anyway). 1.5 is the 3rd harmonic over
+// the 2nd of a bass note below the 180Hz floor, whose fundamental is never
+// seen here. 1.25, the 5th over the 4th, is left out on purpose: it deletes
+// the major third of every major chord, and with it in, 62 corpus tracks that
+// nnls-chroma reads major came out as the parallel minor.
+//
+// Measured with the rest of the stage unchanged, on the 58 labelled Troilo
+// sides and against nnls-chroma's own treble chroma over a 766-track sample
+// of C:\TangoTunes:
+//
+//                      Troilo exact   tonic   agrees with nnls
+//     without           69.0%        79.3%     74.4%
+//     with              79.3%        93.1%     91.5%
+//     nnls-chroma       81.0%        93.1%
+//
+// Eight sides gained and two lost (Tinta roja, Barrio de tango - both major
+// read as the parallel minor), which on 58 sides alone is z=1.90 and short of
+// significance; the agreement figure, over thirteen times as many tracks, is
+// the stronger evidence. nnls-chroma is a fair yardstick for it because the
+// Troilo keys were set by ear, on passages where only the piano plays, not
+// read off any detector. Adding 2.5, 3.5 (and 1.75) was within two sides
+// either way on Troilo and about a point lower on agreement, so the smaller
+// set was kept.
+const double key_harmonic_ratios[] = { 3.0, 5.0, 6.0, 7.0, 1.5 };
+const int key_harmonic_ratio_count =
+	static_cast<int>(sizeof key_harmonic_ratios / sizeof *key_harmonic_ratios);
+const double key_harmonic_tolerance_cents = 30.0;
+
 // Frames quieter than this fraction of the track's median frame are skipped: a
 // lead-in groove has no pitch in it, and its noise floor whitens into peaks
 // like anything else would.
@@ -108,10 +147,10 @@ const double key_mode_hop_seconds = 3.0;
 
 const double key_tuning_min_r = 0.25;
 const double key_wrap_warn_cents = 45.0;
-// Fitted against the fixed-Hz background window, and no longer ranking under
-// the pitch-width one - see the note at the top of the file. Left alone on
-// purpose: refitting them would be refitting them on the only 58 sides there
-// are to test against.
+// Fitted against the fixed-Hz background window. They stopped ranking under the
+// pitch-width one and rank again with harmonic attribution - high 89% exact,
+// medium and low 64% on the labelled sides. Left alone on purpose: refitting
+// them would be refitting them on the only 58 sides there are to test against.
 const double key_margin_high = 0.104;
 const double key_margin_medium = 0.040;
 const double key_retune_max_cents = 60.0;
@@ -140,6 +179,19 @@ const double key_whiten_frac =
 
 namespace
 {
+	//! key_harmonic_ratios in octaves, which is what the per-frame check compares.
+	struct harmonic_log2_table
+	{
+		double v[sizeof key_harmonic_ratios / sizeof *key_harmonic_ratios];
+		harmonic_log2_table()
+		{
+			for (int k = 0; k < key_harmonic_ratio_count; k++)
+				v[k] = std::log(key_harmonic_ratios[k]) / std::log(2.0);
+		}
+		double operator[](int k) const { return v[k]; }
+	};
+	const harmonic_log2_table key_harmonic_log2;
+
 	// Name a key the way its own key signature spells it.
 	//
 	// Tango sits in Bb, Eb, Ab, Gm, Cm and Fm constantly. Printing those as A#,
@@ -751,8 +803,13 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 	//
 	// Kept per frame as well as summed, because that is all the mode tracking
 	// below needs - 12 floats a frame, against a second pass over the audio.
+	//
+	// A peak that is a harmonic of a stronger, lower peak in the same frame is
+	// counted at that peak's pitch class rather than its own - see
+	// key_harmonic_ratios for why and what it is worth.
 	std::vector<float> frame_chroma(static_cast<std::size_t>(frames) * 12, 0.0f);
 	double full[12] = { 0 };
+	int pcs[key_peaks_per_frame];
 	for (int f = 0; f < frames; f++)
 	{
 		const int c = peak_count[f];
@@ -764,8 +821,28 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 			const double cents = 1200.0 * std::log(fp[i] / 440.0) * inv_log2;
 			const long semis = std::lround((cents - out.tuning_cents) / 100.0);
 			// A=440 is pitch class 9, so the grid is anchored there, not at C.
-			const int pc = static_cast<int>(((semis + 9) % 12 + 12) % 12);
-			const float w = static_cast<float>(std::log1p(mp[i]));
+			pcs[i] = static_cast<int>(((semis + 9) % 12 + 12) % 12);
+		}
+		for (int j = 0; j < c; j++)
+		{
+			// The strongest lower peak this one is a harmonic of, if any.
+			int owner = -1;
+			for (int i = 0; i < c; i++)
+			{
+				if (i == j || fp[i] >= fp[j] || mp[i] < mp[j]) continue;
+				if (owner >= 0 && mp[i] <= mp[owner]) continue;
+				const double ratio = std::log(static_cast<double>(fp[j]) / fp[i]) * inv_log2;
+				for (int k = 0; k < key_harmonic_ratio_count; k++)
+				{
+					if (std::fabs(ratio - key_harmonic_log2[k]) * 1200.0 < key_harmonic_tolerance_cents)
+					{
+						owner = i;
+						break;
+					}
+				}
+			}
+			const int pc = owner >= 0 ? pcs[owner] : pcs[j];
+			const float w = static_cast<float>(std::log1p(mp[j]));
 			row[pc] += w;
 			full[pc] += w;
 		}

@@ -56,9 +56,9 @@ inline pfc::string8 bpm_format_key(const bpmcore::key_analysis & key)
 
 //! All three candidates with their correlations - "Dm:0.866 C:0.702 Gm:0.701".
 //!
-//! Not a consolation prize for the ones that lost. The first is right 60% of
-//! the time and the true key is somewhere in the three 93% of the time, so
-//! this is where most of what was measured actually is.
+//! Not a consolation prize for the ones that lost. The first is right 79% of
+//! the time and the true key is somewhere in the three 95% of the time, so
+//! this is where the rest of what was measured is.
 inline pfc::string8 bpm_format_key_candidates(const bpmcore::key_analysis & key)
 {
 	pfc::string8 out;

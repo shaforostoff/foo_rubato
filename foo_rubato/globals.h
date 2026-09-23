@@ -35,9 +35,9 @@
 // either having to be told about the other.
 //
 // KEY holds one answer because that is what a player or a DJ tool will read.
-// KEYCANDIDATES holds all three with their scores, which is where most of
-// what was measured actually is: the first is right 60% of the time and the
-// true key is in the three 93% of the time. KEYCONFIDENCE says which of those
+// KEYCANDIDATES holds all three with their scores, which is where the rest of
+// what was measured is: the first is right 79% of the time and the true key
+// is in the three 95% of the time. KEYCONFIDENCE says which of those
 // two numbers applies to this track.
 #define BPM_KEY_TAG              "KEY"
 #define BPM_KEY_CANDIDATES_TAG   "KEYCANDIDATES"

@@ -13,17 +13,16 @@ Change Log
   what speed correction would put the transfer back on pitch.
 
   The key detector is not accurate enough to present a single answer as fact,
-  and the tag schema says so rather than hiding it. `KEY` is right about 69%
-  of the time and names the right tonic 79% of the time; the true key is among
-  the three in `KEYCANDIDATES` 91% of the time. The three are written together
+  and the tag schema says so rather than hiding it. `KEY` is right about 79%
+  of the time and names the right tonic 93% of the time; the true key is among
+  the three in `KEYCANDIDATES` 95% of the time. The three are written together
   or not at all.
 
-  `KEYCONFIDENCE` is the weak part and is known to be. Its bands were fitted
-  against the older background window and no longer rank: on the labelled
-  sides the bottom band is now 74% exact against the middle band's 43%. They
-  have been left as they are rather than refitted, because those 58 sides are
-  the whole of the evidence and no second discography carries a key column to
-  check a new threshold against. Read the candidate list, not the band.
+  `KEYCONFIDENCE` bands were fitted against an older front end and have not
+  been refitted, because those 58 sides are the whole of the evidence and no
+  second discography carries a key column to check a new threshold against.
+  They do rank: `high` is 89% exact on the labelled sides, `medium` and `low`
+  64%.
 
   Everything was measured against TangoTunes' hand-made discography data -
   58 Troilo sides with a hand-written recording key, 130 Biagi transfers with
@@ -59,6 +58,17 @@ Change Log
   the ceiling to 3520Hz is significantly worse, and reaching below 180Hz
   needs a window over twice as long, at which point it straddles two beats at
   tango tempo and mixes the chords either side - 60% falls to 47%.
+
+* A spectral peak that is the 3rd, 5th, 6th or 7th harmonic of a stronger
+  peak below it - or stands 3:2 above one, which is what the harmonics of a
+  bass note under the 180Hz floor look like - is counted at that peak's pitch
+  class instead of its own. Peak picking had been counting a note's 3rd
+  harmonic as a fifth actually played, which was the single commonest error.
+  It is a cheap stand-in for nnls-chroma's harmonic model: 69% to 79% exact
+  and 79% to 93% on the tonic over the labelled sides (eight gained, two
+  lost), and agreement with nnls-chroma over a 766-track sample of the
+  TangoTunes library from 74% to 92%. The 5:4 ratio is deliberately left out:
+  it deletes the major third of every major chord.
 
 * The retune suggestion needs the recording year, which no amount of signal
   processing supplies; the component reads `ORIGINALDATE` first and falls back
