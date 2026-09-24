@@ -118,6 +118,9 @@ if ($Kiss) {
     $suffix    += '-kiss'
     Write-Host '  spectral stage: KISS FFT, double - not the shipping configuration' -ForegroundColor Yellow
 } else {
+    # Named rather than left to the default: a tree configured when KISS was
+    # the default still has it cached, and would otherwise ship it.
+    $cmakeArgs += '-DBPMCORE_FFT_BACKEND=pffft', '-DBPMCORE_FFT_SCALAR=float'
     Write-Host '  spectral stage: PFFFT, float' -ForegroundColor DarkGray
 }
 

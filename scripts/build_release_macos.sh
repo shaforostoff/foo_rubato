@@ -172,6 +172,9 @@ if [[ $use_kiss -eq 1 ]]; then
     suffix="-kiss"
     echo "  spectral stage: KISS FFT, double - not the shipping configuration"
 else
+    # Named rather than left to the default: a tree configured when KISS was
+    # the default still has it cached, and would otherwise ship it.
+    cmake_args+=(-DBPMCORE_FFT_BACKEND=pffft -DBPMCORE_FFT_SCALAR=float)
     echo "  spectral stage: PFFFT, float"
 fi
 
