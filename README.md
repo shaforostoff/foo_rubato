@@ -593,3 +593,9 @@ Links
   the original component, on the foobar2000 forum
 * [KISS FFT](http://sourceforge.net/projects/kissfft/)
 * [PFFFT](https://bitbucket.org/jpommier/pffft)
+
+License
+-------
+
+MIT - see [LICENSE](LICENSE). The bundled FFT libraries keep their own licences:
+[kiss_fft/COPYING](kiss_fft/COPYING) and [pffft/COPYING](pffft/COPYING).
