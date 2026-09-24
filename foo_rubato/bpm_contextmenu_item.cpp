@@ -5,6 +5,7 @@
 #include "bpm_auto_analysis_thread.h"
 #include "bpm_ui.h"
 #include "file_info_filter_scale_bpm.h"
+#include "bpm_tmpo_sync.h"
 
 static contextmenu_group_popup_factory g_bpm_context_group(guid_bpm_context_group, contextmenu_groups::root, "Rubato BPM Analyzer", 0);
 
@@ -129,7 +130,7 @@ void bpm_contextmenu_item::run_scale_bpm(metadb_handle_list_cref p_data, double 
 		fb2k::service_new<file_info_filter_scale_bpm>(bpm_tag_name(), p_scale),
 		core_api::get_main_window(),
 		metadb_io_v2::op_flag_background | metadb_io_v2::op_flag_delay_ui,
-		NULL);
+		bpm_tmpo_sync_after(p_data, bpm_tag_name()));
 }
 
 static contextmenu_item_factory_t<bpm_contextmenu_item> contextmenu_factory;

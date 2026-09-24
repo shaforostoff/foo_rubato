@@ -8,6 +8,7 @@
 #include "format_bpm.h"
 #include "file_info_filter_bpm.h"
 #include "bpm_ui.h"
+#include "bpm_tmpo_sync.h"
 
 using std::string;
 
@@ -43,7 +44,7 @@ LRESULT bpm_manual_dialog::OnUpdateFileClicked(UINT uNotifyCode, int nID, CWindo
 			fb2k::service_new<file_info_filter_bpm>(track, bpm_tag_name(), m_bpm),
 			core_api::get_main_window(),
 			metadb_io_v2::op_flag_background | metadb_io_v2::op_flag_delay_ui,
-			NULL);
+			bpm_tmpo_sync_after(pfc::list_single_ref_t<metadb_handle_ptr>(track), bpm_tag_name()));
 	}
 
 	return 0;

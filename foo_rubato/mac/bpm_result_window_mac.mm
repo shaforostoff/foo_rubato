@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "../bpm_result_format.h"
+#include "../bpm_tmpo_sync.h"
 #include "../bpm_track_result.h"
 #include "../bpm_ui.h"
 #include "../file_info_filter_bpm.h"
@@ -55,7 +56,7 @@ namespace
 			                                        rhythm_tag.is_empty() ? nullptr : rhythm_tag.get_ptr()),
 			core_api::get_main_window(),
 			metadb_io_v2::op_flag_background | metadb_io_v2::op_flag_delay_ui,
-			NULL);
+			bpm_tmpo_sync_after(model.tracks, bpm_tag_name()));
 	}
 
 	//! Is there anything to put in the "BPM from tag" column? It is only built

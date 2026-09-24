@@ -20,13 +20,18 @@
 // them every time either is.
 #define BPM_ALGORITHM_TAG     "BpmAlgorithm"
 #define BPM_KEY_ALGORITHM_TAG "KeyAlgorithm"
+// TUNING's attribution. beaTunes writes TUNING (as "Tuning") with one of these
+// beside it, and foobar2000 treats the two spellings as one field, so writing
+// our TUNING without touching this left files crediting beaTunes for our
+// number.
+#define BPM_TUNING_ALGORITHM_TAG "TuningAlgorithm"
 
 // The tempo the track opens at, beside the BPM for the whole of it. Named
-// after the INITIALKEY field other taggers write; foobar2000 chooses the
-// spelling each container wants, which for INITIALKEY is upper case in a
-// Vorbis comment, lower case in an iTunes freeform atom and the standard TKEY
-// frame in ID3. Not configurable, for the same reason BPM_ALGORITHM_TAG is
-// not: a reader has to know what it is called.
+// after the INITIALKEY field other taggers write. foobar2000 writes it under
+// exactly this name in every container - a TXXX frame in ID3, a freeform atom
+// in MP4 - which is fine for a field only this component defines. Not
+// configurable, for the same reason BPM_ALGORITHM_TAG is not: a reader has to
+// know what it is called.
 #define BPM_INITIAL_TAG "INITIALBPM"
 
 // Tuning and key. Not configurable either, for the same reason: a reader has
@@ -34,7 +39,13 @@
 // beaTunes already writes in cents, so the two can sit in one library without
 // either having to be told about the other.
 //
-// KEY holds one answer because that is what a player or a DJ tool will read.
+// KEY holds one answer because that is what a player or a DJ tool will read -
+// and so does the container's standard key slot, which is the copy most of
+// them actually find: TKEY in ID3, "initialkey" in MP4, INITIALKEY in a Vorbis
+// comment. Which field name reaches which slot is bpm_initial_key_field's
+// business, in bpm_tag_fields.h. KEY stays as well, so files tagged before the
+// slot was written keep a field that means the same thing.
+//
 // KEYCANDIDATES holds all three with their scores, which is where the rest of
 // what was measured is: the first is right 79% of the time and the true key
 // is in the three 95% of the time. KEYCONFIDENCE says which of those

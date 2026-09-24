@@ -4,7 +4,49 @@ Rubato BPM Analyzer for foobar2000
 Change Log
 ----------
 
-### Unreleased
+### Version 0.2.0
+
+* **The key reaches the slot players read.** foobar2000 writes a field under
+  the name it is given, and `KEY` became a `TXXX:KEY` frame in an mp3 and a
+  freeform `KEY` atom in an m4a - which almost nothing but foobar2000 reads.
+  The key is now also written to each container's standard slot, and the name
+  that reaches it differs per container, which was established by writing
+  each candidate through foobar2000 and reading the raw frames back: `INITIAL
+  KEY` (with the space) becomes the ID3v2 `TKEY` frame, an m4a wants a
+  freeform `initialkey` in lower case, and a Vorbis comment `INITIALKEY`.
+  `KEY` is still written beside it.
+
+  That slot is where beaTunes keeps its key, so a scan replaces beaTunes' key
+  and its `KeyAlgorithm` with ours. The reverse is guarded: with the key
+  switched off, the slot and `KeyAlgorithm` are cleared only when the
+  attribution names this component, so a key another tagger wrote is never
+  deleted.
+
+* **`TUNING` carries a `TuningAlgorithm`.** beaTunes writes the same field,
+  and foobar2000 treats its `Tuning` and our `TUNING` as one, so a scan used
+  to leave beaTunes credited for our number. The attribution now follows the
+  value, on the same terms as `KeyAlgorithm`.
+
+* **An m4a's tempo reaches players.** Players read the MP4 `tmpo` atom, and
+  foobar2000 never writes it - not even over one that is already there,
+  which it leaves standing beside the freeform `BPM` it does write, so a
+  beaTunes-tagged file went on showing beaTunes' tempo everywhere but
+  foobar2000. No field name reaches `tmpo`, so once foobar2000 has finished
+  writing, the component puts the BPM there itself, off the main thread and
+  through foobar2000's own file layer. It changes as little as can be
+  changed: an existing `tmpo` has its two bytes overwritten, and a new one
+  is written only where the tag list ends `moov` and 26 bytes can come out of
+  the padding foobar2000 leaves behind it - so the audio never moves and the
+  offset tables stay true. Any other layout is left alone with a line in the
+  console. Checked on copies of four real files, one of them with a beaTunes
+  `tmpo` already in it: decoded audio bit-identical, file size unchanged,
+  and mutagen reading the new value. mp3 (`TBPM`) and FLAC (`BPM`) never
+  needed this.
+
+* The version is 0.2.0 because the key detector changed underneath it - see
+  harmonic attribution below - and `KeyAlgorithm` is the only way to tell a
+  key measured by this detector from one measured by the last. A library
+  tagged with 0.1.0 can be found by it and rescanned.
 
 * **Tuning and key detection**, off the decode the tempo analysis already
   pays for. Three measurements, in increasing order of how far they can be

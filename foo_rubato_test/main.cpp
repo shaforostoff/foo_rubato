@@ -14,6 +14,11 @@
 #include <bpmcore/bpmcore.h>
 
 #include "../foo_rubato/bpm_key_format.h"
+#include "../foo_rubato/bpm_tag_fields.h"
+#include "../foo_rubato/mp4_tmpo.h"
+
+#include <string>
+#include <vector>
 #include "../foo_rubato/bpm_track_result.h"
 
 #include <cstdio>
@@ -83,8 +88,115 @@ namespace
 	}
 }
 
+namespace
+{
+	//! An MP4 file held in memory, for mp4_set_tmpo.
+	struct memory_mp4 : mp4_io
+	{
+		std::vector<unsigned char> bytes;
+		std::uint64_t size() override { return bytes.size(); }
+		bool read(std::uint64_t o, void * b, std::size_t n) override
+		{
+			if (o + n > bytes.size()) return false;
+			std::memcpy(b, bytes.data() + o, n);
+			return true;
+		}
+		bool write(std::uint64_t o, const void * b, std::size_t n) override
+		{
+			if (o + n > bytes.size()) bytes.resize((std::size_t) (o + n));
+			std::memcpy(bytes.data() + o, b, n);
+			return true;
+		}
+	};
+
+	std::string box(const char * type, const std::string & payload)
+	{
+		const std::uint32_t n = (std::uint32_t) (payload.size() + 8);
+		std::string out;
+		out += (char) (n >> 24); out += (char) (n >> 16); out += (char) (n >> 8); out += (char) n;
+		out += std::string(type, 4);
+		return out + payload;
+	}
+
+	//! ftyp, moov{trak?, udta{meta{hdlr, ilst{----}}}, trak?}, then padding of
+	//! `pad` bytes (none if 0) and an mdat - the layout foobar2000 writes, with
+	//! switches to break it.
+	memory_mp4 make_mp4(std::size_t pad, bool trak_after_udta = false, bool with_mdat = true)
+	{
+		const std::string ilst = box("ilst", box("----", std::string(20, 'x')));
+		const std::string meta = box("meta", std::string(4, '\0') + box("hdlr", std::string(25, '\0')) + ilst);
+		const std::string udta = box("udta", meta);
+		const std::string trak = box("trak", std::string(40, 't'));
+		const std::string moov = box("moov", trak_after_udta ? udta + trak : trak + udta);
+		std::string file = box("ftyp", std::string("M4A \0\0\0\0", 8)) + moov;
+		if (pad) file += box("free", std::string(pad - 8, '\0'));
+		if (with_mdat) file += box("mdat", std::string(64, 'a'));
+		memory_mp4 m;
+		m.bytes.assign(file.begin(), file.end());
+		return m;
+	}
+
+	//! Where the mdat box starts, or 0.
+	std::size_t mdat_at(const memory_mp4 & m)
+	{
+		for (std::size_t p = 0; p + 8 <= m.bytes.size(); )
+		{
+			const unsigned char * b = m.bytes.data() + p;
+			const std::uint32_t n = (b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3];
+			if (std::memcmp(b + 4, "mdat", 4) == 0) return p;
+			if (n < 8) return 0;
+			p += n;
+		}
+		return 0;
+	}
+
+	void check_tmpo()
+	{
+		// Inserted into padding: the audio stays exactly where it was.
+		{
+			memory_mp4 m = make_mp4(100);
+			const std::size_t audio = mdat_at(m), size = m.bytes.size();
+			check(mp4_set_tmpo(m, 129) == mp4_tmpo_inserted, "tmpo, inserted into padding");
+			check(mdat_at(m) == audio && m.bytes.size() == size, "tmpo, audio not moved");
+			check(mp4_set_tmpo(m, 129) == mp4_tmpo_unchanged, "tmpo, second write unchanged");
+			check(mp4_set_tmpo(m, 130) == mp4_tmpo_updated, "tmpo, rewritten in place");
+			check(mdat_at(m) == audio && m.bytes.size() == size, "tmpo, still not moved");
+		}
+		// Padding of exactly 26 bytes is used up; 30 would leave a runt.
+		{
+			memory_mp4 m = make_mp4(26);
+			const std::size_t audio = mdat_at(m);
+			check(mp4_set_tmpo(m, 90) == mp4_tmpo_inserted && mdat_at(m) == audio, "tmpo, padding used up");
+			memory_mp4 r = make_mp4(30);
+			check(mp4_set_tmpo(r, 90) == mp4_tmpo_no_room, "tmpo, refuses to leave a 4-byte runt");
+		}
+		// moov last in the file: it grows, and there is nothing after it to move.
+		{
+			memory_mp4 m = make_mp4(0, false, false);
+			const std::size_t size = m.bytes.size();
+			check(mp4_set_tmpo(m, 101) == mp4_tmpo_inserted && m.bytes.size() == size + 26,
+			      "tmpo, moov at end of file");
+			check(mp4_set_tmpo(m, 101) == mp4_tmpo_unchanged, "tmpo, found again after growing");
+		}
+		// Refusals: no padding before the audio, tags not at the end of moov.
+		{
+			memory_mp4 m = make_mp4(0);
+			const std::vector<unsigned char> before = m.bytes;
+			check(mp4_set_tmpo(m, 101) == mp4_tmpo_no_room && m.bytes == before, "tmpo, no padding, untouched");
+			memory_mp4 t = make_mp4(100, true);
+			const std::vector<unsigned char> tbefore = t.bytes;
+			check(mp4_set_tmpo(t, 101) == mp4_tmpo_no_room && t.bytes == tbefore, "tmpo, tags mid-moov, untouched");
+			memory_mp4 junk;
+			junk.bytes.assign(64, 0x5a);
+			check(mp4_set_tmpo(junk, 101) == mp4_tmpo_not_mp4, "tmpo, not an MP4");
+		}
+	}
+}
+
 int main()
 {
+	check_tmpo();
+
 	const bpmcore::key_analysis k = sample();
 
 	// --- the tag schema, exactly as key-detection-feature-plan.md sets it out
@@ -93,6 +205,25 @@ int main()
 	check_str(bpm_format_key_confidence(k), "high", "KEYCONFIDENCE");
 	check_str(bpm_format_mode_balance(k), "40% major, 7 switches", "MODEBALANCE");
 	check_str(bpm_format_tuning(k), "-19.8", "TUNING");
+
+	// --- the standard key slot, per container, as foobar2000 was observed to
+	// write each name: only the spaced name becomes TKEY, and MP4 wants the
+	// lower-case freeform atom.
+	check_str(bpm_initial_key_field("D:\\chacarera\\x (D).mp3"), "INITIAL KEY", "key slot, mp3");
+	check_str(bpm_initial_key_field("file://D:\\a.b\\Volare.M4A"), "initialkey", "key slot, m4a, dotted folder");
+	check_str(bpm_initial_key_field("D:\\x.flac"), "INITIALKEY", "key slot, flac");
+	check_str(bpm_initial_key_field("D:\\x.opus"), "INITIALKEY", "key slot, opus");
+	check_str(bpm_initial_key_field("D:\\mp3\\noext"), "INITIALKEY", "key slot, no extension");
+	check_str(bpm_initial_key_field("D:\\x.cue|D:\\x.mp3"), "INITIAL KEY", "key slot, after a separator");
+
+	// --- whose attribution a field carries
+	check(bpm_attribution_of("Rubato;v=0.2.0", "Rubato") == bpm_attribution_ours, "attribution, ours");
+	check(bpm_attribution_of("Rubato", "Rubato") == bpm_attribution_ours, "attribution, bare name");
+	check(bpm_attribution_of("RubatoX;v=1", "Rubato") == bpm_attribution_foreign, "attribution, longer name");
+	check(bpm_attribution_of("ForestBasedKey;v=5.2.36;p=AUTO;l=false", "Rubato") == bpm_attribution_foreign,
+	      "attribution, beaTunes");
+	check(bpm_attribution_of("", "Rubato") == bpm_attribution_none, "attribution, empty");
+	check(bpm_attribution_of(nullptr, "Rubato") == bpm_attribution_none, "attribution, missing");
 
 	// A 1943 side reading 19.8 cents flat is simply at A=435 and wants nothing
 	// done to it; the alternative, that the transfer runs slow, is offered

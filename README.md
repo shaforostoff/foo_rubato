@@ -357,16 +357,25 @@ measurement and not a claim about who made it: doubling or halving scales it,
 since a BPM read at the wrong metrical level had its opening read at the wrong
 level too and one factor puts both right. A hand-tapped BPM removes it, there
 being no opening tempo in a tap. Like `BpmAlgorithm` the name is fixed rather
-than configurable, and foobar2000 picks the spelling each container wants -
-`INITIALKEY`, the field it is named after, is upper case in a Vorbis comment,
-lower case in an iTunes freeform atom and the standard `TKEY` frame in ID3.
+than configurable.
+
+Where the BPM itself lands depends on the container. In an mp3 it is the
+standard `TBPM` frame and in FLAC or Ogg the `BPM` comment, both of which
+players read. In an m4a foobar2000 writes it as a freeform `BPM` atom rather
+than the `tmpo` atom players look for, and no field name makes it write
+`tmpo`. So the component writes `tmpo` itself once foobar2000 has finished,
+rounded to a whole number, which is all the atom holds. It overwrites an
+existing `tmpo` in place, and adds one only where foobar2000's own padding
+behind the tags has room for it, so the audio is never moved; a file laid out
+any other way is left alone and says so in the console.
 
 ### Tuning and key
 
-Two more measurements come off the same decode, and they are written as seven
+Two more measurements come off the same decode, and they are written as eight
 fields rather than two because neither is certain enough to state as a fact:
 
     KEY                Dm
+    INITIALKEY         Dm       (TKEY in an mp3, "initialkey" in an m4a)
     KEYCANDIDATES      Dm:0.866 C:0.702 Gm:0.701
     KEYCONFIDENCE      high
     MODEBALANCE        40% major, 7 switches
@@ -382,13 +391,25 @@ the single answer is right 89% of the time, in `medium` and `low` 64%. The three
 together or none of them is written, because `KEY` on its own reads as a fact
 and it is not one.
 
+The key goes to the container's standard key slot as well as to `KEY`,
+because that slot is the one players and DJ tools read and `KEY` reaches
+almost none of them. foobar2000 only maps one name onto a native key frame -
+`INITIAL KEY`, with the space, becomes `TKEY` in an mp3 - and writes every
+other name as it is given, so the component picks the name per container:
+`INITIAL KEY` for mp3, a lower-case `initialkey` for m4a (the spelling beaTunes
+and Mixed In Key use), and `INITIALKEY` for FLAC, Ogg and everything else. The
+slot is shared with beaTunes, and a scan replaces beaTunes' key there; with
+the key switched off the slot is cleared only if `KeyAlgorithm` says this
+component wrote it.
+
 `MODEBALANCE` is which of the relative pair was in charge and how often it
 changed hands. That is not a key change: a tango with a minor A section and a
 major B section keeps one key signature throughout.
 
-An eighth field records the attribution rather than a measurement:
+Two more fields record attribution rather than a measurement:
 
-    KeyAlgorithm = Rubato;v=<version>
+    KeyAlgorithm    = Rubato;v=<version>
+    TuningAlgorithm = Rubato;v=<version>
 
 the same value as `BpmAlgorithm`, one component and one build stamping both,
 and under the name other taggers already use for it. There are two fields
@@ -399,11 +420,14 @@ covering both would be wrong about one of them every time either is. What
 `KeyAlgorithm` stands behind is specifically a `KEY` this scan wrote: where
 none was measured, or where the key fields are switched off, it is removed
 along with them rather than left claiming credit for a field that is not there
-or for one another tagger put there. Both attributions share the *Write
+- unless another tagger's name is in it, in which case its key and its
+attribution are both left alone. The attributions share the *Write
 BpmAlgorithm and KeyAlgorithm* checkbox under **Tagging**.
 
-`TUNING` is cents from A=440, matching the field beaTunes already writes, so
-both can sit in one library. It is a good deal more reliable than the key -
+`TUNING` is cents from A=440, the field beaTunes also writes. foobar2000
+treats beaTunes' `Tuning` and this `TUNING` as one field, so a scan replaces
+beaTunes' value, and `TuningAlgorithm` follows it so the file does not go on
+crediting beaTunes for our number. It is a good deal more reliable than the key -
 against 130 transfers whose speed TangoTunes set by hand the median error is
 about 2 cents, and which of A=435 and A=440 the transfer was made at comes
 back from the audio alone 98% of the time.

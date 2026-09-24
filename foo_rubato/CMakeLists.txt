@@ -41,6 +41,7 @@ set(FOO_RUBATO_SOURCES
     bpm_analysis.cpp
     bpm_auto_analysis_thread.cpp
     bpm_contextmenu_item.cpp
+    bpm_tmpo_sync.cpp
     file_info_filter_bpm.cpp
     file_info_filter_scale_bpm.cpp
     foo_rubato.cpp
@@ -51,6 +52,8 @@ set(FOO_RUBATO_SOURCES
     bpm_auto_analysis_thread.h
     bpm_contextmenu_item.h
     bpm_result_format.h
+    bpm_tag_fields.h
+    bpm_tmpo_sync.h
     bpm_track_result.h
     bpm_ui.h
     fft_license.h
@@ -59,6 +62,7 @@ set(FOO_RUBATO_SOURCES
     format_bpm.h
     globals.h
     guid.h
+    mp4_tmpo.h
     preferences.h
     resource.h
     stdafx.h

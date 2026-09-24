@@ -8,6 +8,7 @@
 #include "file_info_filter_bpm.h"
 #include "bpm_result_format.h"
 #include "bpm_ui.h"
+#include "bpm_tmpo_sync.h"
 
 using std::string;
 
@@ -42,7 +43,7 @@ LRESULT bpm_result_dialog::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 			                                        rhythm_tag.is_empty() ? nullptr : rhythm_tag.get_ptr()),
 			core_api::get_main_window(),
 			metadb_io_v2::op_flag_background | metadb_io_v2::op_flag_delay_ui,
-			NULL);
+			bpm_tmpo_sync_after(m_tracks, bpm_tag_name()));
 
 		DestroyWindow();
 	}
@@ -154,7 +155,7 @@ LRESULT bpm_result_dialog::OnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 		                                        rhythm_tag.is_empty() ? nullptr : rhythm_tag.get_ptr()),
 		core_api::get_main_window(),
 		metadb_io_v2::op_flag_background | metadb_io_v2::op_flag_delay_ui,
-		NULL);
+		bpm_tmpo_sync_after(m_tracks, bpm_tag_name()));
 
 	DestroyWindow();
 	return 0;

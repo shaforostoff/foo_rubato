@@ -3,6 +3,7 @@
 #include "file_info_filter_bpm.h"
 
 #include "bpm_result_format.h"
+#include "bpm_tag_fields.h"
 #include "format_bpm.h"
 #include "globals.h"
 #include "version.h"
@@ -110,20 +111,54 @@ bool file_info_filter_bpm::apply_filter(metadb_handle_ptr p_track, t_filestats p
 	set_or_remove(p_info, BPM_MODE_BALANCE_TAG,
 	              bpm_format_mode_balance(r.key), m_write_key);
 
-	// The key's own attribution, on the same terms as the BPM's above: stamped
-	// only where this component stands behind the value beside it, and removed
-	// rather than left standing anywhere it does not.
+	// The key again, in the container's standard slot - TKEY, "initialkey" or
+	// INITIALKEY - which is where most players and DJ tools look, and where
+	// KEY alone was reaching almost none of them.
 	//
-	// What it stands behind here is a KEY this scan actually wrote. A track
-	// with no steady pitch in it measures no key, and with the key fields
-	// switched off none is written, and in both cases KEY has just been removed
-	// - so an attribution for it would be claiming credit either for a field
-	// that is not there or for one some other tagger put there.
+	// That slot is shared: beaTunes keeps its own key there, with its own
+	// KeyAlgorithm beside it. Writing ours over it is the point. Clearing it
+	// is not ours to do unless we put it there, so when this scan writes no
+	// key the slot and the attribution go only if the attribution names this
+	// component. A slot with no attribution beside it is left alone: no
+	// earlier version wrote the slot, so whoever did was someone else - Mixed
+	// In Key writes TKEY with no attribution at all.
 	const bool key_ours = m_write_key && !key_name.is_empty();
-	if (!key_ours) p_info.meta_remove_field(BPM_KEY_ALGORITHM_TAG);
-	else if (m_write_algorithm) p_info.meta_set(BPM_KEY_ALGORITHM_TAG, FOO_RUBATO_ALGORITHM);
+	const char * const key_slot = bpm_initial_key_field(p_track->get_path());
+	const bpm_attribution key_was = bpm_attribution_of(
+		p_info.meta_get(BPM_KEY_ALGORITHM_TAG, 0), FOO_RUBATO_ALGORITHM_NAME);
+	if (key_ours)
+	{
+		p_info.meta_set(key_slot, key_name);
+		// Stamped if the attribution is switched on, and otherwise removed
+		// whoever wrote it: an older one would now describe our key.
+		if (m_write_algorithm) p_info.meta_set(BPM_KEY_ALGORITHM_TAG, FOO_RUBATO_ALGORITHM);
+		else p_info.meta_remove_field(BPM_KEY_ALGORITHM_TAG);
+	}
+	else if (key_was == bpm_attribution_ours)
+	{
+		p_info.meta_remove_field(key_slot);
+		p_info.meta_remove_field(BPM_KEY_ALGORITHM_TAG);
+	}
 
-	set_or_remove(p_info, BPM_TUNING_TAG, bpm_format_tuning(r.key), m_write_tuning);
+	// Tuning, on the same terms. TUNING is also beaTunes' field, so ours
+	// replaces theirs, and TuningAlgorithm has to follow or the file credits
+	// beaTunes for our number. Nothing is cleared that another tagger wrote;
+	// a TUNING with no attribution is cleared as before, because that is
+	// what every earlier version of this component wrote.
+	const pfc::string8 tuning = bpm_format_tuning(r.key);
+	const bpm_attribution tuning_was = bpm_attribution_of(
+		p_info.meta_get(BPM_TUNING_ALGORITHM_TAG, 0), FOO_RUBATO_ALGORITHM_NAME);
+	if (m_write_tuning && !tuning.is_empty())
+	{
+		p_info.meta_set(BPM_TUNING_TAG, tuning);
+		if (m_write_algorithm) p_info.meta_set(BPM_TUNING_ALGORITHM_TAG, FOO_RUBATO_ALGORITHM);
+		else p_info.meta_remove_field(BPM_TUNING_ALGORITHM_TAG);
+	}
+	else if (tuning_was != bpm_attribution_foreign)
+	{
+		p_info.meta_remove_field(BPM_TUNING_TAG);
+		p_info.meta_remove_field(BPM_TUNING_ALGORITHM_TAG);
+	}
 
 	set_or_remove(p_info, BPM_RETUNE_TAG,
 	              bpm_format_retune(r.key, r.year), m_write_retune);

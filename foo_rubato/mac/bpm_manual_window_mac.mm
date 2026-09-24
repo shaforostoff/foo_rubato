@@ -16,6 +16,7 @@
 #include <chrono>
 #include <vector>
 
+#include "../bpm_tmpo_sync.h"
 #include "../bpm_ui.h"
 #include "../file_info_filter_bpm.h"
 #include "../format_bpm.h"
@@ -189,7 +190,7 @@ static NSMutableArray<fooRubatoTapWindow *> * g_openWindows = nil;
 			fb2k::service_new<file_info_filter_bpm>(track, bpm_tag_name(), _bpm),
 			core_api::get_main_window(),
 			metadb_io_v2::op_flag_background | metadb_io_v2::op_flag_delay_ui,
-			NULL);
+			bpm_tmpo_sync_after(pfc::list_single_ref_t<metadb_handle_ptr>(track), bpm_tag_name()));
 	}
 }
 

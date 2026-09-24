@@ -46,10 +46,13 @@ RETUNE             -1.72% to A=440
 RETUNECANDIDATES   -1.72%@A=440 -2.83%@A=435 +2.94%@A=435
 ```
 
-- `KEY` — single best guess, so players and other tools see something usable.
+- `KEY` — single best guess, so players and other tools see something usable. The same
+  value also goes to the container's standard key slot (0.2.0 on) — `TKEY` in an mp3,
+  `initialkey` in an m4a, `INITIALKEY` in a Vorbis comment — because that slot is what
+  players read; see the README for the field names that reach it through foobar2000.
 - `KEYCANDIDATES` — all three with their correlation scores. This is not a consolation
-  prize: the top pick is right 60% of the time but the true key is in this list 93% of the
-  time, and **100%** of the time in the high-confidence band.
+  prize: the top pick is right 79% of the time but the true key is in this list 95% of the
+  time (60% and 93% at first ship).
 - `KEYCONFIDENCE` — `high` / `medium` / `low` from the correlation margin. Calibrated, see
   §3. A player can trust `high` and treat the rest as a shortlist.
 - `MODEBALANCE` — fraction of the track favouring the major of the relative pair, and how
@@ -57,8 +60,9 @@ RETUNECANDIDATES   -1.72%@A=440 -2.83%@A=435 +2.94%@A=435
 - `TUNING` — cents from A=440, matching beaTunes' existing field so both can coexist.
 - `RETUNE` / `RETUNECANDIDATES` — omitted entirely when the year tag is missing or ≥ 1976.
 
-**One key tag, not two.** `KEY` and `INITIALKEY` are not worth splitting: the opening mode
-differs from the predominant mode in **1 of 60** tracks. The interesting information is
+**One key, not two.** A separate *opening* key is not worth reporting: the opening mode
+differs from the predominant mode in **1 of 60** tracks. (`INITIALKEY` is written, but as a
+second copy of the same key in the slot players read, not as an opening key.) The interesting information is
 the balance, and that is what `MODEBALANCE` carries.
 
 ---
