@@ -284,6 +284,37 @@ namespace
 		return failed == 0 ? 0 : 1;
 	}
 
+	//! Prints the rhythm feature vector for one file, decoded as `batch` does,
+	//! so it can be set beside what scripts/analysis/features.py makes of the
+	//! same track. The class and confidence come first.
+	int run_features(const char * path)
+	{
+		std::vector<float> mono;
+		std::string error;
+		if (!decode_track(path, ffmpeg_path(), mono, error))
+		{
+			std::fprintf(stderr, "cannot decode %s: %s\n", path, error.c_str());
+			return 2;
+		}
+		bpmcore::odf o;
+		if (!bpmcore::compute_odf(mono.data(), mono.size(), bpmcore::odf_model_rate, o, nullptr, 0))
+			return 3;
+		std::vector<float> novelty;
+		bpmcore::mix_bands(o, novelty);
+		bpmcore::make_novelty(novelty, o.frame_rate);
+		std::vector<double> acf;
+		bpmcore::autocorrelate(novelty, acf,
+			static_cast<int>(std::lround(5.0 * o.frame_rate)), o.frame_rate, 0);
+		const bpmcore::grid g = bpmcore::find_grid(acf, o.frame_rate);
+		std::vector<double> features;
+		bpmcore::build_features(o, novelty, acf, g, features);
+		double conf = 0;
+		const int cls = bpmcore::classify(features, &conf);
+		std::printf("%s %.6f\n", bpmcore::rhythm_name(cls), conf);
+		for (std::size_t i = 0; i < features.size(); i++) std::printf("%.9g\n", features[i]);
+		return 0;
+	}
+
 	int run_batch(const char * list_path, int threads)
 	{
 		std::ifstream in(list_path, std::ios::binary);
@@ -1288,6 +1319,7 @@ int main(int argc, char ** argv)
 		               argc >= 5 ? std::atoi(argv[4]) : 0);
 	if (mode == "key_batch" && argc >= 3)
 		return run_key_batch(argv[2], argc >= 4 ? std::atoi(argv[3]) : 0);
+	if (mode == "features" && argc >= 3) return run_features(argv[2]);
 	if (mode == "batch" && argc >= 3)
 		return run_batch(argv[2], argc >= 4 ? std::atoi(argv[3]) : 0);
 	if (mode == "bench" && argc >= 4)

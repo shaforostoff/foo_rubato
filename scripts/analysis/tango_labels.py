@@ -38,8 +38,14 @@ _RULES = [
                  'milonga']),
     ('vals',    ['vals criollo', 'vals cancion', 'vals peruano', 'vals pasillo',
                  'vals serenata', 'valsecito', 'vals', 'waltz', 'walzer']),
+    # 'argentinetango' is one word as some taggers write it. Without it the
+    # word boundary below misses it entirely, and 24 modern-orchestra tangos
+    # in C:/TangoTunes/Modern went into training as 'other' - which, with every
+    # other tango a shellac side, taught the model that a clean recording is
+    # not a tango.
     ('tango',   ['tango cancion', 'tango sinfonico', 'tango canyengue', 'tango negro',
-                 'tango campero', 'tango electronico', 'tango nuevo', 'tango']),
+                 'tango campero', 'tango electronico', 'tango nuevo', 'argentinetango',
+                 'argentine tango', 'tango']),
     ('reggae',  ['roots reggae', 'rocksteady', 'rock steady', 'reggae']),
 ]
 
@@ -51,6 +57,18 @@ _RULES = [
 _FOLDERS = [
     ('reggae', ['cortinas/reggae']),
 ]
+
+# Folders left out of training and evaluation altogether, because no class
+# describes them: calling El Cachivache Quinteto 'tango' teaches the model
+# that tango punk is danced, and calling it 'other' teaches it that a modern
+# tango orchestra is not a tango - the very mistake the 'argentinetango' rule
+# above was added to undo.
+_EXCLUDED = ['modern/2018 - el cachivache quinteto']
+
+
+def excluded(rec):
+    p = rec['path'].replace(os.sep, '/').replace('\\', '/').lower()
+    return any('/' + f in p for f in _EXCLUDED)
 
 _ACC = str.maketrans('áàâäãéèêëíìîïóòôöõúùûüñç', 'aaaaaeeeeiiiiooooouuuunc')
 

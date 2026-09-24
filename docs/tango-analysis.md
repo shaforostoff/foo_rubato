@@ -263,16 +263,37 @@ heavily, and many sides exist as a transfer, a declicked copy and a retuned
 copy):
 
 ```
-n=12160   accuracy=93.63%   balanced=78.97%
+n=12191   accuracy=94.04%   balanced=80.22%
 
 actual        tango     vals  milonga   reggae    other   recall
-tango          8369       23       18        1      112    98.2%
-vals             20      932        8        0       46    92.6%
-milonga          69       13      617        0       54    81.9%
-reggae            1        0        0       29       38    42.6%
-other           194      100       72        6     1438    79.4%
-precision     96.7%    87.3%    86.3%    80.6%    85.2%
+tango          8445       17       21        0      103    98.4%
+vals             19      929        9        0       51    92.2%
+milonga          65       13      622        0       53    82.6%
+reggae            1        0        0       32       35    47.1%
+other           172       92       68        7     1437    80.9%
+precision     97.0%    88.4%    86.4%    82.1%    85.6%
 ```
+
+That is the model refitted on 2026-09-24, after a labelling fault was found:
+44 recordings by modern orchestras in `C:/TangoTunes/Modern` - 41 tangos, two
+valses and a milonga - had been trained as "other". 24 carried the genre
+`Argentinetango`, which the word-boundary match did not read as tango, 16
+`Latinfolk` and four no tag at all. With every other tango a shellac side, the
+model learnt those particular recordings as not tango - the shipped build
+called 40 of 45 of them "other" at p 0.81-0.98 - though an album it had never
+seen, held out whole, came out right under the old labels too. The refit reads
+`Argentinetango`, takes the retagged albums, adds the 20 sides of Sentimental y
+Canyengue, and leaves out El Cachivache Quinteto, which is tango punk and fits
+no class.
+
+Over ten grouped fold arrangements, against a fit on the old labels over the
+same features: accuracy on the 12,121 tracks whose label did not change is
++0.03 points (better in five, worse in five), the right tapped level on 4,811
+hand taps +0.06, the modern tracks 100% against 98.6%. Reggae, at 68 tracks,
+moves by up to three tracks either way and nets half a track down.
+
+The comparisons that follow were measured on the fit before this one
+(n=12,160, 93.63% accuracy, 78.97% balanced).
 
 Fitting four classes on the same tracks and the same folds, with reggae folded
 back into "other", is what the model was before and gives 94.22% accuracy,

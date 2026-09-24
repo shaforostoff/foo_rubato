@@ -54,6 +54,16 @@ Change Log
   song misleads every player. A genre already there is never replaced, and
   `Other` is never written. The separate rhythm tag stays switched off.
 
+* **Tangos by modern orchestras are called tango.** The shipped model had
+  been trained with 44 modern-orchestra recordings as "other" - their genre
+  tag read `Argentinetango` or `Latinfolk`, which the labelling did not take
+  for tango - and called 40 of 45 of them "other", so no genre was written
+  and a milonga's tempo came out at the wrong level: La Puñalada read 115
+  where it is danced at 58. The labels are corrected and the model refitted.
+  Over ten cross-validation arrangements it matches the old model on the
+  12,121 other tracks (+0.03 points) and on 4,811 hand taps (+0.06), and still
+  tags none of 778 non-tango tracks as a dance at the 0.98 cutoff.
+
 * The version is 0.2.0 because the key detector changed underneath it - see
   harmonic attribution below - and `KeyAlgorithm` is the only way to tell a
   key measured by this detector from one measured by the last. A library

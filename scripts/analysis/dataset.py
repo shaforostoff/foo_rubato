@@ -23,6 +23,8 @@ def load_odf(p):
 def records(need_bpm=False, need_cache=True):
     out = []
     for r in T.load(config.WORK):
+        if T.excluded(r):
+            continue
         v = T.hand_tapped(r)
         if need_bpm and v is None:
             continue
