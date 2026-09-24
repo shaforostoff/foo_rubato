@@ -43,6 +43,17 @@ Change Log
   and mutagen reading the new value. mp3 (`TBPM`) and FLAC (`BPM`) never
   needed this.
 
+* **An empty `GENRE` gets the detected dance.** Where a scanned file has no
+  genre and the classifier says Tango, Vals, Milonga or Reggae, that goes into
+  `GENRE` - the field every player shows - provided the classifier is at
+  least 98% sure. That cutoff is what stops a pop song being filed as a
+  tango: with none, 16 of 778 non-tango tracks (Volare, La Mer, The Mambo
+  Craze) came out as a dance; at 0.98, none did, while 95.9% of 755 real
+  dances still got their genre - every vals and milonga, and all but 31 of
+  603 tangos. An untagged dance is no worse off than before; a mislabelled
+  song misleads every player. A genre already there is never replaced, and
+  `Other` is never written. The separate rhythm tag stays switched off.
+
 * The version is 0.2.0 because the key detector changed underneath it - see
   harmonic attribution below - and `KeyAlgorithm` is the only way to tell a
   key measured by this detector from one measured by the last. A library

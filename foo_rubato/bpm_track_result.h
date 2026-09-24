@@ -25,6 +25,7 @@ struct bpm_track_result
 	double initial_bpm = 0;   //!< 0 where the opening had no beat to measure
 	double spread = 0;        //!< 0 where the track was too short to measure one
 	pfc::string8 rhythm;      //!< empty where no tempo was measured
+	double rhythm_confidence = 0;   //!< the classifier's probability for `rhythm`, 0..1
 
 	//! The user doubled or halved this row in the results window, so the
 	//! analysis no longer stands behind the number and it loses its

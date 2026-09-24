@@ -462,6 +462,7 @@ void bpm_auto_analysis_thread::run(threaded_process_status & p_status, abort_cal
 		bpm_track_result r;
 		r.bpm = result.bpm;
 		r.rhythm = result.ok ? bpmcore::rhythm_name(result.rhythm) : "";
+		r.rhythm_confidence = result.ok ? result.confidence : 0.0;
 		r.spread = result.ok ? result.bpm_spread : 0.0;
 		r.initial_bpm = result.ok ? result.initial_bpm : 0.0;
 		r.key = result.key;

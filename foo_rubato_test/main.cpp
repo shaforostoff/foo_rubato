@@ -16,13 +16,12 @@
 #include "../foo_rubato/bpm_key_format.h"
 #include "../foo_rubato/bpm_tag_fields.h"
 #include "../foo_rubato/mp4_tmpo.h"
-
-#include <string>
-#include <vector>
 #include "../foo_rubato/bpm_track_result.h"
 
 #include <cstdio>
 #include <cstring>
+#include <string>
+#include <vector>
 
 namespace
 {
@@ -215,6 +214,17 @@ int main()
 	check_str(bpm_initial_key_field("D:\\x.opus"), "INITIALKEY", "key slot, opus");
 	check_str(bpm_initial_key_field("D:\\mp3\\noext"), "INITIALKEY", "key slot, no extension");
 	check_str(bpm_initial_key_field("D:\\x.cue|D:\\x.mp3"), "INITIAL KEY", "key slot, after a separator");
+
+	// --- the detected dance as GENRE, into an empty one only, and only when
+	// the classifier is sure
+	check_str(pfc::string8(bpm_genre_to_write(nullptr, "Tango", 0.99, "Other")), "Tango", "genre, none there");
+	check_str(pfc::string8(bpm_genre_to_write("", "Vals", 0.98, "Other")), "Vals", "genre, empty, at the cutoff");
+	check_str(pfc::string8(bpm_genre_to_write("  ", "Milonga", 1.0, "Other")), "Milonga", "genre, blank");
+	check(bpm_genre_to_write(nullptr, "Tango", 0.956, "Other") == nullptr, "genre, not for Volare's 0.956");
+	check(bpm_genre_to_write(nullptr, "Other", 1.0, "Other") == nullptr, "genre, not for Other");
+	check(bpm_genre_to_write(nullptr, "", 1.0, "Other") == nullptr, "genre, not when nothing was measured");
+	check(bpm_genre_to_write("Pop", "Tango", 1.0, "Other") == nullptr, "genre, never replaces one");
+	check(bpm_genre_to_write("Tango", "Vals", 1.0, "Other") == nullptr, "genre, not even a tango one");
 
 	// --- whose attribution a field carries
 	check(bpm_attribution_of("Rubato;v=0.2.0", "Rubato") == bpm_attribution_ours, "attribution, ours");

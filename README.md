@@ -171,6 +171,14 @@ branch, and restoring all three places brings them back with their old values,
 which persist in foobar2000's configuration keyed by GUID either way. The
 rhythm is still detected and still shown in the results window.
 
+It also fills an empty `GENRE`. A scanned file with no genre that the
+classifier puts in Tango, Vals, Milonga or Reggae with at least 98%
+probability gets that as its genre. The cutoff is deliberately high: below it,
+songs like Volare and La Mer come out as tangos, and a wrong genre does more
+harm than a missing one - about 4% of real tangos are left without one
+instead. `Other` is never written, and a genre already there is never
+replaced, even where the classifier disagrees with it.
+
 The nine STFT and candidate-selection controls that used to fill an *Automatic
 Analysis* group are gone with the engine that read them. That was the original
 2009 algorithm, kept switchable through the 2025 port and removed in 0.1.0: it

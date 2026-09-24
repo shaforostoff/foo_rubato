@@ -34,6 +34,10 @@
 // know what it is called.
 #define BPM_INITIAL_TAG "INITIALBPM"
 
+// The standard genre field - TCON in ID3, the genre atom in MP4 - which gets
+// the detected dance when it is empty. See bpm_genre_to_write.
+#define BPM_GENRE_TAG "GENRE"
+
 // Tuning and key. Not configurable either, for the same reason: a reader has
 // to know what these are called, and TUNING in particular is the field
 // beaTunes already writes in cents, so the two can sit in one library without

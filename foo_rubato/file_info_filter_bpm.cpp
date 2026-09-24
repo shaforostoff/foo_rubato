@@ -99,6 +99,14 @@ bool file_info_filter_bpm::apply_filter(metadb_handle_ptr p_track, t_filestats p
 	// below this line is for an analysis result only.
 	if (!m_from_analysis) return true;
 
+	// The detected dance as the genre, where the file has none. Written
+	// regardless of the rhythm tag above, which stays switched off: GENRE is
+	// a field every player shows, and an empty one tells nobody anything.
+	if (const char * genre = bpm_genre_to_write(p_info.meta_get(BPM_GENRE_TAG, 0), r.rhythm,
+	                                            r.rhythm_confidence,
+	                                            bpmcore::rhythm_name(bpmcore::rhythm_other)))
+		p_info.meta_set(BPM_GENRE_TAG, genre);
+
 	// The key, and - always beside it - how far to trust it. KEY on its own
 	// reads as a fact; it is right 79% of the time, and the two fields that
 	// say so travel with it or none of them is written.
