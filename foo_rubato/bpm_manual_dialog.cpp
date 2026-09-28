@@ -55,34 +55,34 @@ LRESULT bpm_manual_dialog::OnTapClicked(UINT uNotifyCode, int nID, CWindow wndCt
 	LARGE_INTEGER time;
 	QueryPerformanceCounter(&time);
 
+	// A tap that comes long enough after the last one is the start of a fresh
+	// measurement rather than a very slow beat.
 	if (!tap_times.empty() &&
-		((tap_times[tap_times.size() - 1] - time.QuadPart) > time_to_reset_average))
+		((time.QuadPart - tap_times.back()) > time_to_reset_average))
 	{
 		ResetBPM();
 	}
-	else
+
+	if (tap_times.size() >= (size_t) bpm_config_taps_to_average)
 	{
-		if (tap_times.size() >= (size_t) bpm_config_taps_to_average)
+		tap_times.erase(tap_times.begin());
+	}
+
+	tap_times.push_back(time.QuadPart);
+
+	if (tap_times.size() > 1)
+	{
+		double avg_time_diff = 0.0;
+
+		for (unsigned index = 1; index < tap_times.size(); index++)
 		{
-			tap_times.erase(tap_times.begin());
+			avg_time_diff += (tap_times[index] - tap_times[index-1]);
 		}
 
-		tap_times.push_back(time.QuadPart);
+		avg_time_diff = avg_time_diff / ((double) tap_times.size() - 1.0);
+		double bpm = 60.0 / (avg_time_diff / (double) timer_resolution);
 
-		if (tap_times.size() > 1)
-		{
-			double avg_time_diff = 0.0;
-
-			for (unsigned index = 1; index < tap_times.size(); index++)
-			{
-				avg_time_diff += (tap_times[index] - tap_times[index-1]);
-			}
-
-			avg_time_diff = avg_time_diff / ((double) tap_times.size() - 1.0);
-			double bpm = 60.0 / (avg_time_diff / (double) timer_resolution);
-
-			SetBPM(bpm);
-		}
+		SetBPM(bpm);
 	}
 
 	return 0;

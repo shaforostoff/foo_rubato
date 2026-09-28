@@ -141,7 +141,6 @@ static NSMutableArray<fooRubatoTapWindow *> * g_openWindows = nil;
 	if (!_taps.empty() && (now - _taps.back()) > resetAfter)
 	{
 		[self resetBPM];
-		return;
 	}
 
 	const std::size_t keep = taps_to_keep();
