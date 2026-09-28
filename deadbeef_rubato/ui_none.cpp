@@ -1,4 +1,5 @@
-// No windows: the build without RUBATO_DDB_GTK. See rubato_ui.h.
+// No windows: the build with neither RUBATO_DDB_GTK nor RUBATO_DDB_COCOA.
+// See rubato_ui.h.
 
 #include "rubato_ui.h"
 

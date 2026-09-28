@@ -22,7 +22,7 @@ ddb_playlist_t the_playlist;
 std::map<std::string, int> conf_ints;
 std::map<std::string, std::string> conf_strings;
 fake_track * playing = nullptr;
-DB_plugin_t * gtkui = nullptr;
+DB_plugin_t * ui_plugin = nullptr;
 bool quiet = false;
 
 fake_track * T(DB_playItem_t * it) { return reinterpret_cast<fake_track *>(it); }
@@ -218,7 +218,7 @@ int f_pl_is_selected(DB_playItem_t * it) { return T(it)->selected ? 1 : 0; }
 DB_plugin_t * f_plug_get_for_id(const char * id)
 {
 	if (std::strcmp(id, "fake") == 0) return &fake_decoder.plugin;
-	if (gtkui != nullptr && gtkui->id != nullptr && std::strcmp(id, gtkui->id) == 0) return gtkui;
+	if (ui_plugin != nullptr && ui_plugin->id != nullptr && std::strcmp(id, ui_plugin->id) == 0) return ui_plugin;
 	return nullptr;
 }
 

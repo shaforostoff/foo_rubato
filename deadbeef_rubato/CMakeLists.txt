@@ -17,6 +17,7 @@
 # macOS (universal, Apple Silicon and Intel):
 #   cmake -S deadbeef_rubato -B build/ddb-mac -DCMAKE_BUILD_TYPE=Release
 #   cmake --build build/ddb-mac
+# or scripts/build_release_deadbeef_macos.sh for a release.
 #
 # Linux:
 #   cmake -S deadbeef_rubato -B build/ddb -DCMAKE_BUILD_TYPE=Release
@@ -26,8 +27,14 @@
 # DeaDBeeF's GTK 3 interface, and needs GTK 3 development files (pkg-config
 # gtk+-3.0). On by default on Linux and with MinGW, where DeaDBeeF's interface
 # is GTK 3; off by default for MSVC, which cannot link the GTK DeaDBeeF ships,
-# and on macOS, where the interface is Cocoa. Off, the plugin has no windows:
-# a scan writes as soon as it finishes and reports in the log.
+# and on macOS, where the interface is Cocoa.
+#
+# -DRUBATO_DDB_COCOA=ON builds the same windows in Cocoa for DeaDBeeF for Mac,
+# and needs nothing beyond the macOS SDK. On by default on macOS, and only
+# there. One or the other, not both.
+#
+# With neither, the plugin has no windows: a scan writes as soon as it
+# finishes and reports in the log.
 #
 # Then `ctest --test-dir <build dir> -C Release`. See README.md for where the
 # built library goes on each platform.
@@ -111,7 +118,21 @@ else()
     set(_rubato_gtk_default ON)
 endif()
 option(RUBATO_DDB_GTK "Build the windows for DeaDBeeF's GTK 3 interface" ${_rubato_gtk_default})
-if(RUBATO_DDB_GTK)
+option(RUBATO_DDB_COCOA "Build the windows for DeaDBeeF's Cocoa interface, on macOS" ${APPLE})
+if(RUBATO_DDB_COCOA AND NOT APPLE)
+    message(FATAL_ERROR "RUBATO_DDB_COCOA is for macOS; turn it off here.")
+endif()
+if(RUBATO_DDB_COCOA AND RUBATO_DDB_GTK)
+    message(FATAL_ERROR "RUBATO_DDB_GTK and RUBATO_DDB_COCOA are both on; a build has one set of windows.")
+endif()
+if(RUBATO_DDB_COCOA)
+    enable_language(OBJCXX)
+    set(CMAKE_OBJCXX_STANDARD 17)
+    set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+    set(CMAKE_OBJCXX_EXTENSIONS OFF)
+    set(CMAKE_OBJCXX_VISIBILITY_PRESET hidden)
+    message(STATUS "Windows: Cocoa")
+elseif(RUBATO_DDB_GTK)
     find_package(PkgConfig)
     if(PKG_CONFIG_FOUND)
         pkg_check_modules(GTK3 IMPORTED_TARGET gtk+-3.0>=3.16)
@@ -126,6 +147,11 @@ if(RUBATO_DDB_GTK)
     message(STATUS "Windows: GTK ${GTK3_VERSION}")
 else()
     message(STATUS "Windows: none")
+endif()
+if(RUBATO_DDB_GTK OR RUBATO_DDB_COCOA)
+    set(RUBATO_WINDOWS ON)
+else()
+    set(RUBATO_WINDOWS OFF)
 endif()
 
 configure_file(rubato_version.h.in "${CMAKE_CURRENT_BINARY_DIR}/rubato_version.h" @ONLY)
@@ -160,11 +186,16 @@ endif()
 target_link_libraries(rubato_plugin_objects PUBLIC bpmcore Threads::Threads)
 # Whether the settings page offers the options that are about windows.
 target_compile_definitions(rubato_plugin_objects PRIVATE
-    RUBATO_HAVE_WINDOWS=$<BOOL:${RUBATO_DDB_GTK}>)
+    RUBATO_HAVE_WINDOWS=$<BOOL:${RUBATO_WINDOWS}>)
 
 if(RUBATO_DDB_GTK)
     add_library(rubato_ui OBJECT gtk/ui_gtk.cpp include/deadbeef/gtkui_api.h)
     target_link_libraries(rubato_ui PUBLIC PkgConfig::GTK3)
+elseif(RUBATO_DDB_COCOA)
+    add_library(rubato_ui OBJECT cocoa/ui_cocoa.mm)
+    target_compile_options(rubato_ui PRIVATE -fobjc-arc -Wall -Wextra)
+    # AppKit is DeaDBeeF's, already loaded; the plugin only links against it.
+    target_link_libraries(rubato_ui PUBLIC "-framework Cocoa")
 else()
     add_library(rubato_ui OBJECT ui_none.cpp)
 endif()
@@ -183,6 +214,8 @@ target_link_libraries(ddb_rubato PRIVATE bpmcore Threads::Threads)
 if(RUBATO_DDB_GTK)
     # Resolved against the GTK the player has already loaded.
     target_link_libraries(ddb_rubato PRIVATE PkgConfig::GTK3)
+elseif(RUBATO_DDB_COCOA)
+    target_link_libraries(ddb_rubato PRIVATE "-framework Cocoa")
 endif()
 set_target_properties(ddb_rubato PROPERTIES OUTPUT_NAME "ddb_rubato" PREFIX "")
 if(APPLE)
@@ -254,7 +287,14 @@ if(RUBATO_DDB_BUILD_TESTS)
     # directory to draw each one to a PNG and exit.
     if(RUBATO_DDB_GTK)
         add_executable(rubato_gtk_preview tests/gtk_preview.cpp tests/fake_host.cpp
-            tests/fake_host.h $<TARGET_OBJECTS:rubato_ui>)
+            tests/fake_host.h tests/preview_tracks.h $<TARGET_OBJECTS:rubato_ui>)
         target_link_libraries(rubato_gtk_preview PRIVATE rubato_plugin_objects PkgConfig::GTK3)
+    endif()
+    # The same for the Cocoa windows.
+    if(RUBATO_DDB_COCOA)
+        add_executable(rubato_cocoa_preview tests/cocoa_preview.mm tests/fake_host.cpp
+            tests/fake_host.h tests/preview_tracks.h $<TARGET_OBJECTS:rubato_ui>)
+        target_compile_options(rubato_cocoa_preview PRIVATE -fobjc-arc)
+        target_link_libraries(rubato_cocoa_preview PRIVATE rubato_plugin_objects "-framework Cocoa")
     endif()
 endif()

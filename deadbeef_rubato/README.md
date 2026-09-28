@@ -9,24 +9,26 @@ names and the same rules as foo_rubato, so a library tagged by either player
 reads the same in the other.
 
 It needs DeaDBeeF 1.8.0 or later (plugin API 1.10), and builds for Windows,
-macOS and Linux. Built with GTK it has foo_rubato's results window, a
-progress window and the tapping window, for DeaDBeeF's GTK 3 interface on
-Linux and Windows; built without, it writes as soon as a scan finishes and
-reports in the log. A Cocoa version of the windows for macOS is planned - see
-[Windows](#windows) for how it fits.
+macOS and Linux. It has foo_rubato's results window, a progress window and the
+tapping window - in GTK 3 for DeaDBeeF's GTK 3 interface on Linux and Windows,
+and in Cocoa for DeaDBeeF for Mac. Built without them, it writes as soon as a
+scan finishes and reports in the log. See [Windows](#windows) for how the two
+toolkits share them.
 
 Building
 --------
 
-A C++17 compiler and CMake 3.16 or later, and for the windows the GTK 3
+A C++17 compiler and CMake 3.16 or later, and for the GTK windows the GTK 3
 development files. Nothing is downloaded: DeaDBeeF's plugin headers are in
 `include/`, and `bpmcore`, PFFFT and KISS FFT are built from the directories
 beside this one. Run these from the repository root.
 
-`-DRUBATO_DDB_GTK=ON` or `OFF` decides whether the windows are built. It is on
-by default on Linux and with MinGW, where DeaDBeeF's interface is GTK 3, and
-configuring fails with instructions if GTK 3.16 or later is not found; it is
-off by default with MSVC and on macOS.
+`-DRUBATO_DDB_GTK=ON` or `OFF` decides whether the GTK windows are built. It
+is on by default on Linux and with MinGW, where DeaDBeeF's interface is GTK 3,
+and configuring fails with instructions if GTK 3.16 or later is not found; it
+is off by default with MSVC and on macOS. `-DRUBATO_DDB_COCOA=ON` or `OFF` does
+the same for the Cocoa windows, which need nothing but the macOS SDK; it is on
+by default on macOS and available nowhere else. A build has one or the other.
 
 ### Windows, Visual Studio
 
@@ -69,12 +71,27 @@ the DLL depends on nothing but Windows.
     cmake --build build/ddb-mac
     ctest --test-dir build/ddb-mac
 
-writes `build/ddb-mac/ddb_rubato.dylib`, universal (Apple Silicon and Intel)
-and ad-hoc signed, without windows for now. The signature is not optional - Apple Silicon will not load
-unsigned code - but it need not be a real one, because DeaDBeeF does not run
-under the hardened runtime. `-DRUBATO_CODESIGN_IDENTITY="Developer ID
-Application: ..."` signs with a real identity instead, and
-`-DCMAKE_OSX_ARCHITECTURES=arm64` builds for one architecture only.
+writes `build/ddb-mac/ddb_rubato.dylib`, universal (Apple Silicon and Intel),
+ad-hoc signed, with the Cocoa windows. It runs on macOS 10.13 on Intel, which
+is what DeaDBeeF for Mac asks for, and 11 on Apple Silicon. The signature is
+not optional - Apple Silicon will not load unsigned code - but it need not be
+a real one, because DeaDBeeF does not run under the hardened runtime.
+`-DRUBATO_CODESIGN_IDENTITY="Developer ID Application: ..."` signs with a real
+identity instead, and `-DCMAKE_OSX_ARCHITECTURES=arm64` builds for one
+architecture only.
+
+For a release, `scripts/build_release_deadbeef_macos.sh` builds it universal,
+runs the tests, moves the debug information into a `.dSYM`, strips and signs
+the library again, checks that both architectures are in it, that it exports
+only its entry point, links to nothing but macOS itself and loads in every
+architecture the machine can run, and makes an installer of it,
+`dist/ddb_rubato-<version>-macos-universal.pkg` - see [Installing](#installing).
+The installer is unsigned unless `--sign` names a "Developer ID Installer"
+identity, which also has the library signed by its "Developer ID Application"
+partner (or by `--codesign`); `--notarize --notary-profile <name>` then has it
+notarized and the ticket stapled, and only a signed and notarized installer
+opens from a double-click once downloaded. `--install` also copies the library straight to
+where the installer puts it, to try it. `--help` lists the options.
 
 ### Linux
 
@@ -117,6 +134,21 @@ by taking the file name, dropping the extension and appending `_load`, so a
 renamed library is skipped without a word. *Rubato BPM Analyzer* should then
 be listed under **Preferences > Plugins**.
 
+On macOS, the release is an installer, `ddb_rubato-<version>-macos-universal.pkg`,
+that does this: it installs for the current user only, with no administrator
+password, into the folder above, and asks for DeaDBeeF to be quit first if it
+is running. If it is not signed and notarized, macOS will not open it from a
+double-click once it has been downloaded; right-click it and choose **Open**,
+or on macOS 15 and later allow it under **System Settings > Privacy &
+Security**. To remove the plugin, delete the file.
+
+Copied by hand from a download instead, the library may carry the quarantine
+flag a browser puts on what it downloads, and depending on the version of
+macOS be refused without a word. If the plugin does not appear, clear the flag
+and restart DeaDBeeF:
+
+    xattr -d com.apple.quarantine ~/Library/Application\ Support/Deadbeef/Plugins/ddb_rubato.dylib
+
 Using it
 --------
 
@@ -140,7 +172,8 @@ Select tracks and open the **Rubato** submenu of the playlist's context menu:
 The analyses are also in the context menu of a playlist's tab, where they
 apply to the whole playlist.
 
-Every analysed track also gets a line in the log window, **View > Log**:
+Every analysed track also gets a line in the log window, **View > Log**
+(**Window > Log Window** on the Mac):
 
     rubato: [3/12] La cumparsita.flac: 118.52 BPM, Tango (p=0.99), opens at 121.3, +/-2.1; key Dm (high), tuning -19.8 c, retune +0.00% to A=435
 
@@ -201,18 +234,19 @@ the others have to decide again:
   toolkit in it: which columns there are, what every cell and tooltip says,
   what doubling a row does, what the commit button is labelled and writes, how
   far a scan has got, and what tapping along measures.
-* `rubato_ui.h` is the five calls the plugin makes to put a window up -
+* `rubato_ui.h` is the calls the plugin makes to put a window up -
   `connect`, `shutdown`, `available`, `show_progress`, `show_results`,
   `show_tap` - each callable from any thread. `gtk/ui_gtk.cpp` implements
-  them in GTK 3, `ui_none.cpp` as nothing, and `CMakeLists.txt` picks one.
+  them in GTK 3, `cocoa/ui_cocoa.mm` in Cocoa, `ui_none.cpp` as nothing, and
+  `CMakeLists.txt` picks one.
 
-A Cocoa version is a third implementation of `rubato_ui.h`, an Objective-C++
-file under `cocoa/` that lays out `NSWindow`s from the same model - the
-foobar2000 component's `foo_rubato/mac/` windows are the natural starting
-point for the layout - chosen by a `RUBATO_DDB_COCOA` option beside
-`RUBATO_DDB_GTK`. It hands work to the main thread with `dispatch_async`
-where the GTK one uses `g_idle_add`, and it should answer `available()` only
-when DeaDBeeF's Cocoa interface is the one running.
+The Cocoa windows are Objective-C++ with ARC, laid out in code with Auto
+Layout - there are no nibs to ship - and hand work to the main thread with
+`dispatch_async` where the GTK ones use `g_idle_add`. They appear when
+DeaDBeeF's Cocoa interface, `cocoaui`, is the one running, which in DeaDBeeF
+for Mac it always is. They are the GTK windows' layout in Cocoa's idiom:
+Escape cancels, Return presses the commit button, and holding the space bar in
+the tapping window taps once rather than repeating.
 
 The GTK windows appear only under DeaDBeeF's GTK 3 interface. Under the GTK 2
 interface the plugin behaves as a build without windows; that interface is
@@ -280,6 +314,8 @@ Tests
   same stand-in with eight made-up tracks behind them, to look at them without
   the player. Given a directory, it saves each window to a PNG there and
   exits. It is not run by `ctest`, since it needs a display.
+  `rubato_cocoa_preview`, in a Cocoa build, does the same for the Cocoa
+  windows, over the same tracks (`tests/preview_tracks.h`).
 
 Files
 -----
@@ -289,7 +325,8 @@ Files
 * `rubato_format.h` - the strings and field names, with no DeaDBeeF in it.
 * `rubato_results.h`, `rubato_results.cpp` - what the windows show and do,
   with no toolkit in it.
-* `rubato_ui.h`, `ui_none.cpp`, `gtk/ui_gtk.cpp` - the windows.
+* `rubato_ui.h`, `ui_none.cpp`, `gtk/ui_gtk.cpp`, `cocoa/ui_cocoa.mm` - the
+  windows.
 * `include/deadbeef/deadbeef.h`, `include/deadbeef/gtkui_api.h` - DeaDBeeF's
   plugin header and its GTK interface's, from the 1.10.3 release tag,
   unmodified (zlib licence, in each file).

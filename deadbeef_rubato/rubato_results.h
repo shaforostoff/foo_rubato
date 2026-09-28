@@ -8,8 +8,8 @@
 // double and halve buttons do to a row, what the commit button is labelled and
 // what it writes, how far a scan has got, and what tapping along measures. A
 // window is left with laying these out and passing clicks back - so the GTK
-// windows in gtk/ and the Cocoa ones that are to follow them cannot come to
-// disagree about anything but their looks.
+// windows in gtk/ and the Cocoa ones in cocoa/ cannot come to disagree about
+// anything but their looks.
 //
 // rubato_ui.h is the other half: the functions the plugin calls to put a
 // window up, one implementation per toolkit.

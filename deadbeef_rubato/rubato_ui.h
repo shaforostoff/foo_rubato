@@ -5,14 +5,14 @@
 //
 // One implementation per toolkit, chosen when the plugin is built:
 //
-//   ui_none.cpp       no windows. The plugin writes as soon as a scan
-//                     finishes and reports in the log, which is how it
-//                     behaves in a build without RUBATO_DDB_GTK too.
+//   ui_none.cpp       no windows, in a build with neither RUBATO_DDB_GTK nor
+//                     RUBATO_DDB_COCOA. The plugin writes as soon as a scan
+//                     finishes and reports in the log.
 //   gtk/ui_gtk.cpp    GTK 3, for DeaDBeeF's GTK 3 interface on Linux and
 //                     Windows.
+//   cocoa/ui_cocoa.mm Cocoa, for DeaDBeeF for Mac.
 //
-// A Cocoa one for macOS is meant to follow as a third file beside these,
-// implementing the same five functions against rubato_results.h and nothing
+// Each implements the same functions against rubato_results.h and nothing
 // else. What the windows show is decided there, not here.
 //
 // Every function may be called from any thread - a scan finishes on a worker

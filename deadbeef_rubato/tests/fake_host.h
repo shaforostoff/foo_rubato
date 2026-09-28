@@ -4,8 +4,8 @@
 // A stand-in for DeaDBeeF: the part of DB_functions_t the plugin calls - a
 // playlist, track metadata, a decoder that synthesises a click track, the
 // configuration, the log and what is playing - so the real plugin can be run
-// with no player installed. Shared by ddb_rubato_hosttest and
-// rubato_gtk_preview.
+// with no player installed. Shared by ddb_rubato_hosttest and the two
+// window previews, rubato_gtk_preview and rubato_cocoa_preview.
 //
 // What it cannot stand in for is the player's own half: whether a decoder's
 // write_metadata puts a field where the plugin expects, which rubato_format.h
@@ -46,7 +46,7 @@ extern std::map<std::string, std::string> conf_strings;
 extern fake_track * playing;   //!< what streamer_get_playing_track returns
 //! Returned for its own id by plug_get_for_id, to stand in for DeaDBeeF's
 //! interface plugin; null for none.
-extern DB_plugin_t * gtkui;
+extern DB_plugin_t * ui_plugin;
 extern bool quiet;             //!< no log on stdout
 
 extern int plt_refs;

@@ -3,7 +3,7 @@
 //
 // Runs the real actions on the real worker threads: every track decoded,
 // analysed and written the way the player would see it. The first half runs
-// with no windows, as a build without RUBATO_DDB_GTK does; the second with
+// with no windows, as a build without any does; the second with
 // them, through the results window's model and the tapping window's, which is
 // everything a window decides.
 
