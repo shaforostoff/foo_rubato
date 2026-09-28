@@ -25,7 +25,7 @@ beside this one. Run these from the repository root.
 
 `-DRUBATO_DDB_GTK=ON` or `OFF` decides whether the GTK windows are built. It
 is on by default on Linux and with MinGW, where DeaDBeeF's interface is GTK 3,
-and configuring fails with instructions if GTK 3.16 or later is not found; it
+and configuring fails with instructions if GTK 3.10 or later is not found; it
 is off by default with MSVC and on macOS. `-DRUBATO_DDB_COCOA=ON` or `OFF` does
 the same for the Cocoa windows, which need nothing but the macOS SDK; it is on
 by default on macOS and available nowhere else. A build has one or the other.
@@ -110,6 +110,22 @@ exports only its entry point, splits off the debug symbols and packs
 builds with this machine's toolchain, so the plugin needs a glibc at least as
 new as this machine's; the script says which at the end. Build on the oldest
 distro the release is meant for. `--help` lists the options.
+
+### DeaDBeeF's plugin builder
+
+DeaDBeeF's own downloads page is built by
+[deadbeef-plugin-builder](https://github.com/DeaDBeeF-Player/deadbeef-plugin-builder),
+which runs GNU Make or autotools and not CMake, so `Makefile` builds the
+plugin for it - the shipping configuration, from the same sources, with the
+compiler and flags the builder sets. It has to be kept in step with
+`CMakeLists.txt` by hand. `make check` builds and runs the host test against
+the same objects. The builder compiles against GTK 3.10, which is why the GTK
+windows use nothing newer.
+
+The builder's side is `plugins/ddb_rubato/manifest.json` in its repository.
+It builds on Linux in an Ubuntu 20.04 container, which is what makes that
+package run on glibc 2.31 and later; run locally, its `build` tool uses the
+local glibc like everything else.
 
 ### Options
 

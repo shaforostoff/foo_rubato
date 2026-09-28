@@ -112,7 +112,7 @@ if ! git -C "$root" diff --quiet HEAD -- 2>/dev/null; then revision="$revision-d
 for tool in cmake cc c++ zip objcopy objdump strip readelf nm; do
     command -v "$tool" >/dev/null || die "$tool was not found on PATH."
 done
-if [[ $with_gtk -eq 1 ]] && ! pkg-config --exists 'gtk+-3.0 >= 3.16' 2>/dev/null; then
+if [[ $with_gtk -eq 1 ]] && ! pkg-config --exists 'gtk+-3.0 >= 3.10' 2>/dev/null; then
     die "the GTK 3 development files were not found (libgtk-3-dev on Debian and Ubuntu, gtk3-devel on Fedora). Install them, or pass --no-gtk for a plugin without windows."
 fi
 [[ $clean -eq 1 ]] && rm -rf "$build_dir"

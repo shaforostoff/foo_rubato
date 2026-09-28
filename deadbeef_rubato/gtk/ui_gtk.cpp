@@ -79,7 +79,15 @@ void close_on_escape(GtkWidget * window)
 GtkWidget * left_label(const std::string & text)
 {
 	GtkWidget * label = gtk_label_new(text.c_str());
+	// gtk_label_set_xalign is GTK 3.16, and DeaDBeeF's plugin builder compiles
+	// against 3.10. GtkMisc's alignment does the same and is still there in
+	// every GTK 3, only deprecated - so the newer call where the headers have
+	// it, and the older one where they do not.
+#if GTK_CHECK_VERSION(3, 16, 0)
 	gtk_label_set_xalign(GTK_LABEL(label), 0.0f);
+#else
+	gtk_misc_set_alignment(GTK_MISC(label), 0.0f, 0.5f);
+#endif
 	gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
 	// A wrapping label asks for the width of its whole text on one line
 	// unless told otherwise, and a window that is not resizable takes it.

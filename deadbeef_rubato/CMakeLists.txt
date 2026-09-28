@@ -135,11 +135,11 @@ if(RUBATO_DDB_COCOA)
 elseif(RUBATO_DDB_GTK)
     find_package(PkgConfig)
     if(PKG_CONFIG_FOUND)
-        pkg_check_modules(GTK3 IMPORTED_TARGET gtk+-3.0>=3.16)
+        pkg_check_modules(GTK3 IMPORTED_TARGET gtk+-3.0>=3.10)
     endif()
     if(NOT GTK3_FOUND)
         message(FATAL_ERROR
-            "RUBATO_DDB_GTK is on but GTK 3.16 or later was not found through pkg-config.\n"
+            "RUBATO_DDB_GTK is on but GTK 3.10 or later was not found through pkg-config.\n"
             "Install the GTK 3 development files (libgtk-3-dev; in MSYS2 "
             "mingw-w64-x86_64-gtk3), or configure with -DRUBATO_DDB_GTK=OFF "
             "for a plugin without windows.")

@@ -1,0 +1,5 @@
+# What the Makefile builds, for the plugin builder; CMake builds under /build.
+/obj/
+/ddb_rubato.so
+/ddb_rubato.dylib
+/ddb_rubato.dll
