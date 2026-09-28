@@ -168,7 +168,7 @@ and restart DeaDBeeF:
 Using it
 --------
 
-Select tracks and open the **Rubato** submenu of the playlist's context menu:
+Select tracks and open the **Rubato BPM Analyser** submenu of the playlist's context menu:
 
 * **Analyse BPM, key and tuning** analyses them. With the windows, a progress
   window follows the scan - it appears only if the scan is still going after a

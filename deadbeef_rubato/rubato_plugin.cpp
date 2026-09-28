@@ -1027,8 +1027,8 @@ const char plugin_description[] =
 	"Detects the tempo of a track and which of Tango, Vals, Milonga or Reggae "
 	"it is - or none of them - from the audio alone, and measures its tuning "
 	"and key.\n\n"
-	"Select tracks and use Rubato in the context menu. Each track gets a line "
-	"in the log window (View > Log).\n\n"
+	"Select tracks and use Rubato BPM Analyser in the context menu. Each track "
+	"gets a line in the log window (View > Log).\n\n"
 	"Written fields: BPM (TBPM in an mp3, tmpo in an m4a), INITIALBPM, "
 	"BpmAlgorithm, KEY, KEYCANDIDATES, KEYCONFIDENCE, MODEBALANCE, the "
 	"container's initial-key slot and KeyAlgorithm, TUNING and "
@@ -1153,15 +1153,15 @@ extern "C" RUBATO_EXPORT DB_plugin_t * ddb_rubato_load(DB_functions_t * api)
 	// tapping window is about what is playing, not about the selection, and
 	// is offered wherever the menu is.
 	const uint32_t tracks = DB_ACTION_SINGLE_TRACK | DB_ACTION_MULTIPLE_TRACKS | DB_ACTION_ADD_MENU;
-	init_action(act_analyse, "Rubato/Analyse BPM, key and tuning", "rubato_analyse",
+	init_action(act_analyse, "Rubato BPM Analyser/Analyse BPM, key and tuning", "rubato_analyse",
 	            tracks, action_analyse);
-	init_action(act_analyse_only, "Rubato/Analyse without writing tags", "rubato_analyse_only",
+	init_action(act_analyse_only, "Rubato BPM Analyser/Analyse without writing tags", "rubato_analyse_only",
 	            tracks, action_analyse_only);
-	init_action(act_double, "Rubato/Double BPM", "rubato_double",
+	init_action(act_double, "Rubato BPM Analyser/Double BPM", "rubato_double",
 	            tracks | DB_ACTION_EXCLUDE_FROM_CTX_PLAYLIST, action_double);
-	init_action(act_halve, "Rubato/Halve BPM", "rubato_halve",
+	init_action(act_halve, "Rubato BPM Analyser/Halve BPM", "rubato_halve",
 	            tracks | DB_ACTION_EXCLUDE_FROM_CTX_PLAYLIST, action_halve);
-	init_action(act_tap, "Rubato/Tap BPM of the playing track...", "rubato_tap",
+	init_action(act_tap, "Rubato BPM Analyser/Tap BPM of the playing track...", "rubato_tap",
 	            tracks | DB_ACTION_EXCLUDE_FROM_CTX_PLAYLIST, action_tap);
 
 	settings_dialog = settings_dialog_common;

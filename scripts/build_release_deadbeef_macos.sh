@@ -544,5 +544,5 @@ if [[ $install -eq 1 ]]; then
         echo "DeaDBeeF is running: quit and start it again to load this build."
     fi
     echo "Then: Preferences > Plugins should list Rubato BPM Analyzer, and the"
-    echo "track context menu a Rubato submenu. Window > Log Window shows what it did."
+    echo "track context menu a Rubato BPM Analyser submenu. Window > Log Window shows what it did."
 fi
