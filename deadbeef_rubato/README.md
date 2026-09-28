@@ -85,6 +85,15 @@ Application: ..."` signs with a real identity instead, and
 writes `build/ddb/ddb_rubato.so`. The GTK 3 development files are
 `libgtk-3-dev` on Debian and Ubuntu, `gtk3-devel` on Fedora.
 
+For a release, `scripts/build_release_deadbeef_linux.sh` does the same with
+the C++ runtime linked in, runs the tests, checks that the library loads and
+exports only its entry point, splits off the debug symbols and packs
+`dist/ddb_rubato-<version>-linux-x86_64.zip` with the library under
+`plugins/`, as DeaDBeeF's plugin builder packs the plugins it distributes. It
+builds with this machine's toolchain, so the plugin needs a glibc at least as
+new as this machine's; the script says which at the end. Build on the oldest
+distro the release is meant for. `--help` lists the options.
+
 ### Options
 
 `-DBPMCORE_FFT_BACKEND=kiss` builds on the portable double-precision

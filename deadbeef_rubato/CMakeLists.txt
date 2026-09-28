@@ -217,6 +217,19 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_options(ddb_rubato PRIVATE -Wl,--no-undefined)
 endif()
 
+# Export ddb_rubato_load and nothing else. Hidden visibility leaves out the
+# std:: templates the plugin instantiates, which the standard headers mark
+# visible; the linker is what can be told the whole list. Windows exports only
+# what is marked dllexport already.
+if(APPLE)
+    target_link_options(ddb_rubato PRIVATE "LINKER:-exported_symbol,_ddb_rubato_load")
+elseif(NOT WIN32)
+    target_link_options(ddb_rubato PRIVATE
+        "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/ddb_rubato.map")
+    set_property(TARGET ddb_rubato APPEND PROPERTY LINK_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/ddb_rubato.map")
+endif()
+
 # --- tests -----------------------------------------------------------------
 option(RUBATO_DDB_BUILD_TESTS "Build the DeaDBeeF plugin's tests" ON)
 if(RUBATO_DDB_BUILD_TESTS)
