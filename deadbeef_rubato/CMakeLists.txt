@@ -22,6 +22,13 @@
 #   cmake -S deadbeef_rubato -B build/ddb -DCMAKE_BUILD_TYPE=Release
 #   cmake --build build/ddb
 #
+# -DRUBATO_DDB_GTK=ON builds the results, progress and tapping windows for
+# DeaDBeeF's GTK 3 interface, and needs GTK 3 development files (pkg-config
+# gtk+-3.0). On by default on Linux and with MinGW, where DeaDBeeF's interface
+# is GTK 3; off by default for MSVC, which cannot link the GTK DeaDBeeF ships,
+# and on macOS, where the interface is Cocoa. Off, the plugin has no windows:
+# a scan writes as soon as it finishes and reports in the log.
+#
 # Then `ctest --test-dir <build dir> -C Release`. See README.md for where the
 # built library goes on each platform.
 # ---------------------------------------------------------------------------
@@ -98,15 +105,43 @@ add_subdirectory("${RUBATO_ROOT}/bpmcore" bpmcore)
 
 find_package(Threads REQUIRED)
 
+if(APPLE OR MSVC)
+    set(_rubato_gtk_default OFF)
+else()
+    set(_rubato_gtk_default ON)
+endif()
+option(RUBATO_DDB_GTK "Build the windows for DeaDBeeF's GTK 3 interface" ${_rubato_gtk_default})
+if(RUBATO_DDB_GTK)
+    find_package(PkgConfig)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(GTK3 IMPORTED_TARGET gtk+-3.0>=3.16)
+    endif()
+    if(NOT GTK3_FOUND)
+        message(FATAL_ERROR
+            "RUBATO_DDB_GTK is on but GTK 3.16 or later was not found through pkg-config.\n"
+            "Install the GTK 3 development files (libgtk-3-dev; in MSYS2 "
+            "mingw-w64-x86_64-gtk3), or configure with -DRUBATO_DDB_GTK=OFF "
+            "for a plugin without windows.")
+    endif()
+    message(STATUS "Windows: GTK ${GTK3_VERSION}")
+else()
+    message(STATUS "Windows: none")
+endif()
+
 configure_file(rubato_version.h.in "${CMAKE_CURRENT_BINARY_DIR}/rubato_version.h" @ONLY)
 
 # --- the plugin ------------------------------------------------------------
 # Compiled once as an object library, so the host test links exactly the code
 # the player loads.
+# The window implementation is not in it: that is chosen per build below, and
+# the host test links a recording stand-in in its place.
 add_library(rubato_plugin_objects OBJECT
     rubato_plugin.cpp
     rubato_plugin.h
+    rubato_results.cpp
+    rubato_results.h
     rubato_format.h
+    rubato_ui.h
     rubato_version.h.in
     include/deadbeef/deadbeef.h)
 target_include_directories(rubato_plugin_objects PUBLIC
@@ -123,11 +158,32 @@ else()
     target_compile_options(rubato_plugin_objects PRIVATE -Wall -Wextra)
 endif()
 target_link_libraries(rubato_plugin_objects PUBLIC bpmcore Threads::Threads)
+# Whether the settings page offers the options that are about windows.
+target_compile_definitions(rubato_plugin_objects PRIVATE
+    RUBATO_HAVE_WINDOWS=$<BOOL:${RUBATO_DDB_GTK}>)
+
+if(RUBATO_DDB_GTK)
+    add_library(rubato_ui OBJECT gtk/ui_gtk.cpp include/deadbeef/gtkui_api.h)
+    target_link_libraries(rubato_ui PUBLIC PkgConfig::GTK3)
+else()
+    add_library(rubato_ui OBJECT ui_none.cpp)
+endif()
+target_include_directories(rubato_ui PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    $<TARGET_PROPERTY:bpmcore,INTERFACE_INCLUDE_DIRECTORIES>)
+if(MSVC)
+    target_include_directories(rubato_ui PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/compat/msvc")
+endif()
 
 # DeaDBeeF derives the entry point from the file name - ddb_rubato.<ext> must
 # export ddb_rubato_load - and looks for .dll, .dylib or .so by platform.
-add_library(ddb_rubato MODULE $<TARGET_OBJECTS:rubato_plugin_objects>)
+add_library(ddb_rubato MODULE $<TARGET_OBJECTS:rubato_plugin_objects> $<TARGET_OBJECTS:rubato_ui>)
 target_link_libraries(ddb_rubato PRIVATE bpmcore Threads::Threads)
+if(RUBATO_DDB_GTK)
+    # Resolved against the GTK the player has already loaded.
+    target_link_libraries(ddb_rubato PRIVATE PkgConfig::GTK3)
+endif()
 set_target_properties(ddb_rubato PROPERTIES OUTPUT_NAME "ddb_rubato" PREFIX "")
 if(APPLE)
     set_target_properties(ddb_rubato PROPERTIES SUFFIX ".dylib")
@@ -148,7 +204,13 @@ elseif(MINGW)
     # Everything the plugin needs inside the one file: libstdc++, libgcc and
     # winpthreads, which a DeaDBeeF install may carry in another version or
     # not at all.
-    target_link_options(ddb_rubato PRIVATE -static -static-libgcc -static-libstdc++)
+    # GTK stays a DLL: it is DeaDBeeF's own copy that the windows must draw
+    # with, so only the C++ runtime is linked in when there is GTK.
+    if(RUBATO_DDB_GTK)
+        target_link_options(ddb_rubato PRIVATE -static-libgcc -static-libstdc++)
+    else()
+        target_link_options(ddb_rubato PRIVATE -static -static-libgcc -static-libstdc++)
+    endif()
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Nothing is resolved from the host - the whole player API arrives as a
     # table of function pointers - so an undefined symbol is a mistake.
@@ -168,7 +230,18 @@ if(RUBATO_DDB_BUILD_TESTS)
 
     # The plugin driven through a stand-in for the player: actions, decoding,
     # analysis and every field written, without DeaDBeeF installed.
-    add_executable(ddb_rubato_hosttest tests/host_test.cpp)
+    add_executable(ddb_rubato_hosttest tests/host_test.cpp tests/fake_host.cpp tests/fake_host.h
+        tests/ui_recorder.cpp)
     target_link_libraries(ddb_rubato_hosttest PRIVATE rubato_plugin_objects)
     add_test(NAME ddb_rubato_hosttest COMMAND ddb_rubato_hosttest)
+
+    # The GTK windows on the same stand-in, with a synthetic scan behind
+    # them. Not a test - it puts windows up - but the way to look at them
+    # without DeaDBeeF: `rubato_gtk_preview` to use them, or with an output
+    # directory to draw each one to a PNG and exit.
+    if(RUBATO_DDB_GTK)
+        add_executable(rubato_gtk_preview tests/gtk_preview.cpp tests/fake_host.cpp
+            tests/fake_host.h $<TARGET_OBJECTS:rubato_ui>)
+        target_link_libraries(rubato_gtk_preview PRIVATE rubato_plugin_objects PkgConfig::GTK3)
+    endif()
 endif()

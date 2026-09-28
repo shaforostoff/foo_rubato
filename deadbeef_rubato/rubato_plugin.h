@@ -7,7 +7,9 @@
 // extension from ddb_rubato.so / .dll / .dylib and appends "_load". Renaming
 // the library without renaming this function means it is silently skipped.
 
+#ifndef DDB_API_LEVEL
 #define DDB_API_LEVEL 10   // DeaDBeeF 1.8.0 and later
+#endif
 #include <deadbeef/deadbeef.h>
 
 #if defined(_WIN32)

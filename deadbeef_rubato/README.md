@@ -9,15 +9,24 @@ names and the same rules as foo_rubato, so a library tagged by either player
 reads the same in the other.
 
 It needs DeaDBeeF 1.8.0 or later (plugin API 1.10), and builds for Windows,
-macOS and Linux from one source file.
+macOS and Linux. Built with GTK it has foo_rubato's results window, a
+progress window and the tapping window, for DeaDBeeF's GTK 3 interface on
+Linux and Windows; built without, it writes as soon as a scan finishes and
+reports in the log. A Cocoa version of the windows for macOS is planned - see
+[Windows](#windows) for how it fits.
 
 Building
 --------
 
-Only a C++17 compiler and CMake 3.16 or later. Nothing is downloaded: the
-DeaDBeeF plugin header is in `include/`, and `bpmcore`, PFFFT and KISS FFT are
-built from the directories beside this one. Run these from the repository
-root.
+A C++17 compiler and CMake 3.16 or later, and for the windows the GTK 3
+development files. Nothing is downloaded: DeaDBeeF's plugin headers are in
+`include/`, and `bpmcore`, PFFFT and KISS FFT are built from the directories
+beside this one. Run these from the repository root.
+
+`-DRUBATO_DDB_GTK=ON` or `OFF` decides whether the windows are built. It is on
+by default on Linux and with MinGW, where DeaDBeeF's interface is GTK 3, and
+configuring fails with instructions if GTK 3.16 or later is not found; it is
+off by default with MSVC and on macOS.
 
 ### Windows, Visual Studio
 
@@ -25,8 +34,8 @@ root.
     cmake --build build\ddb-x64 --config Release
     ctest --test-dir build\ddb-x64 -C Release
 
-writes `build\ddb-x64\Release\ddb_rubato.dll`. The C runtime is linked
-statically, so it needs no Visual C++ redistributable. DeaDBeeF itself is
+writes `build\ddb-x64\Release\ddb_rubato.dll`, without windows. The C
+runtime is linked statically, so it needs no Visual C++ redistributable. DeaDBeeF itself is
 built with MinGW, which does not matter: the plugin interface is a table of C
 function pointers and nothing allocated on one side is freed on the other.
 `deadbeef.h` includes two POSIX headers MSVC does not have; `compat/msvc/`
@@ -35,17 +44,24 @@ stands in for them and is on the include path for MSVC builds only.
 Build `-A x64` for the 64-bit DeaDBeeF, which is the one its site offers; a
 plugin loads only into a player of its own architecture.
 
+For the windows on Windows, use MSYS2 below instead. The windows have to draw
+with the GTK DLLs DeaDBeeF ships, which come from MSYS2's MINGW64 environment,
+and an MSVC build cannot link against those.
+
 ### Windows, MSYS2 MinGW
 
-From a UCRT64 or MINGW64 shell with `mingw-w64-ucrt-x86_64-toolchain` (or the
-`x86_64` equivalent), `cmake` and `ninja` installed:
+From a MINGW64 shell - the environment DeaDBeeF's own Windows build uses -
+with `mingw-w64-x86_64-toolchain`, `mingw-w64-x86_64-cmake`,
+`mingw-w64-x86_64-ninja` and `mingw-w64-x86_64-gtk3` installed:
 
     cmake -S deadbeef_rubato -B build/ddb-mingw -G Ninja -DCMAKE_BUILD_TYPE=Release
     cmake --build build/ddb-mingw
     ctest --test-dir build/ddb-mingw
 
-libstdc++, libgcc and winpthreads are linked in statically, so the one DLL is
-all there is to copy.
+libstdc++ and libgcc are linked in statically, so the one DLL is all there is
+to copy; GTK is not, because the windows must use the copy DeaDBeeF has
+already loaded. With `-DRUBATO_DDB_GTK=OFF` winpthreads goes in as well and
+the DLL depends on nothing but Windows.
 
 ### macOS
 
@@ -54,7 +70,7 @@ all there is to copy.
     ctest --test-dir build/ddb-mac
 
 writes `build/ddb-mac/ddb_rubato.dylib`, universal (Apple Silicon and Intel)
-and ad-hoc signed. The signature is not optional - Apple Silicon will not load
+and ad-hoc signed, without windows for now. The signature is not optional - Apple Silicon will not load
 unsigned code - but it need not be a real one, because DeaDBeeF does not run
 under the hardened runtime. `-DRUBATO_CODESIGN_IDENTITY="Developer ID
 Application: ..."` signs with a real identity instead, and
@@ -66,7 +82,8 @@ Application: ..."` signs with a real identity instead, and
     cmake --build build/ddb
     ctest --test-dir build/ddb
 
-writes `build/ddb/ddb_rubato.so`.
+writes `build/ddb/ddb_rubato.so`. The GTK 3 development files are
+`libgtk-3-dev` on Debian and Ubuntu, `gtk3-devel` on Fedora.
 
 ### Options
 
@@ -96,35 +113,62 @@ Using it
 
 Select tracks and open the **Rubato** submenu of the playlist's context menu:
 
-* **Analyse BPM, key and tuning** analyses them and writes the tags.
-* **Analyse without writing tags** analyses them and writes nothing, and
-  reports what each file's BPM field held beside the new figure.
+* **Analyse BPM, key and tuning** analyses them. With the windows, a progress
+  window follows the scan - it appears only if the scan is still going after a
+  moment, and **Cancel** abandons it - and then the results window shows every
+  track, and nothing is written until **Update N files** is clicked. Without
+  the windows, or with **Write tags without showing the results window** on,
+  the tags are written as each track finishes.
 * **Double BPM** and **Halve BPM** correct the metrical level of a BPM that is
-  already there, scaling `INITIALBPM` with it and removing `BpmAlgorithm`,
-  because the analysis no longer stands behind the number.
+  already in the file, scaling `INITIALBPM` with it and removing
+  `BpmAlgorithm`, because the analysis no longer stands behind the number.
+* **Tap BPM of the playing track...**, with the windows, opens the tapping
+  window.
+* **Analyse without writing tags**, without the windows, analyses and writes
+  nothing, and reports what each file's BPM field held beside the new figure.
+  With the windows the results window does this, and the entry is not shown.
 
 The analyses are also in the context menu of a playlist's tab, where they
 apply to the whole playlist.
 
-Results go to the log window, **View > Log**, one line per track:
+Every analysed track also gets a line in the log window, **View > Log**:
 
     rubato: [3/12] La cumparsita.flac: 118.52 BPM, Tango (p=0.99), opens at 121.3, +/-2.1; key Dm (high), tuning -19.8 c, retune +0.00% to A=435
 
-There is no results window and no tapping window. DeaDBeeF has no
-toolkit-neutral way to put up a window - the GTK and Cocoa interfaces are each
-a plugin of their own - so anything here with a window would be two plugins,
-one per toolkit. What the foobar2000 results window is for is covered by the
-log line and by analysing without writing first. A track that cannot be read
-or written opens the log window by itself; one that is only skipped does not.
-**Log the details of each analysis** on the settings page adds what
-foo_rubato prints under *Diagnostics*: the beat, the grid, the key's margin
-and the timings.
+A track that cannot be read or written opens the log window by itself; one
+that is only skipped does not. **Log the details of each analysis** on the
+settings page adds what foo_rubato prints under *Diagnostics*: the beat, the
+grid, the key's margin and the timings.
 
 Tracks are scanned several at a time, two short of the machine's logical
 processor count, at below-normal priority so that playback is not starved - the
 same arrangement as foo_rubato, for the same reasons. Quitting DeaDBeeF during
 a scan abandons whatever is left; a track whose analysis was interrupted is
 not written.
+
+### The results window
+
+foo_rubato's, column for column: Title, BPM, BPM from tag (only when some
+track arrived with one), Initial BPM, Fluctuation, Rhythm, and Key and Tuning
+(only when a key was measured). Resting the pointer on a row explains its
+tuning and the retune suggestions, and repeats the title where the column cuts
+it short. **Double BPM** and **Halve BPM** act on the highlighted rows and
+take the attribution off them; **Update N files** writes every row, which is
+why it says how many. **Cancel** or Escape writes nothing. Unlike foo_rubato's
+it can be resized, and several can be open at once.
+
+### The tapping window
+
+Tap along with whatever is playing - click **Tap**, or press the space bar
+anywhere in the window - and the average of the last taps is shown, 30 by
+default; a pause of 5 seconds starts again. Both are on the settings page. A
+tap lands when the button goes down, not when it comes back up, which would
+add however long it was held to every interval.
+
+**Write to playing track** writes to whatever is playing at the moment it is
+clicked, which the window names. A tapped BPM replaces the file's BPM and
+removes `INITIALBPM` and `BpmAlgorithm`; the key and the tuning, which were
+measured, stay.
 
 Settings
 --------
@@ -133,9 +177,40 @@ Settings
 foo_rubato's preferences page has - BPM precision, the BPM field name,
 `INITIALBPM`, the `BpmAlgorithm`/`KeyAlgorithm` attributions, whether to
 measure tuning and key at all and which of `KEY`, `TUNING` and `RETUNE` to
-write, and the diagnostic detail in the log - with the same defaults. In place
-of foo_rubato's question about overwriting tracks that already have a BPM,
-there is **Skip tracks that already have a BPM**, off by default.
+write, the diagnostic detail in the log, and with the windows, writing without
+the results window and the two tapping settings - with the same defaults. In
+place of foo_rubato's question about overwriting tracks that already have a
+BPM, there is **Skip tracks that already have a BPM**, off by default.
+
+Windows
+-------
+
+The windows are split in two so that each toolkit's version decides nothing
+the others have to decide again:
+
+* `rubato_results.h` / `.cpp` is everything a window shows or does, with no
+  toolkit in it: which columns there are, what every cell and tooltip says,
+  what doubling a row does, what the commit button is labelled and writes, how
+  far a scan has got, and what tapping along measures.
+* `rubato_ui.h` is the five calls the plugin makes to put a window up -
+  `connect`, `shutdown`, `available`, `show_progress`, `show_results`,
+  `show_tap` - each callable from any thread. `gtk/ui_gtk.cpp` implements
+  them in GTK 3, `ui_none.cpp` as nothing, and `CMakeLists.txt` picks one.
+
+A Cocoa version is a third implementation of `rubato_ui.h`, an Objective-C++
+file under `cocoa/` that lays out `NSWindow`s from the same model - the
+foobar2000 component's `foo_rubato/mac/` windows are the natural starting
+point for the layout - chosen by a `RUBATO_DDB_COCOA` option beside
+`RUBATO_DDB_GTK`. It hands work to the main thread with `dispatch_async`
+where the GTK one uses `g_idle_add`, and it should answer `available()` only
+when DeaDBeeF's Cocoa interface is the one running.
+
+The GTK windows appear only under DeaDBeeF's GTK 3 interface. Under the GTK 2
+interface the plugin behaves as a build without windows; that interface is
+DeaDBeeF's older one and nothing here is drawn for it. Loading a library
+linked against GTK 3 into a GTK 2 process is itself a risk - the two cannot
+share a process - so a DeaDBeeF running the GTK 2 interface wants a build with
+`-DRUBATO_DDB_GTK=OFF`.
 
 The fields
 ----------
@@ -179,14 +254,23 @@ Tests
 
 * `rubato_format_test` checks every string that reaches a file, under a
   decimal-comma locale where the machine has one.
-* `ddb_rubato_hosttest` loads the plugin into a stand-in for DeaDBeeF - a
-  playlist, track metadata and a decoder that synthesises click tracks, one
-  as float and one as 16-bit audio - and runs all four actions through the
-  worker threads: the fields written per container, the attributions, the
-  cue-sheet and unselected tracks left alone, scaling, skipping tagged tracks,
-  and every reference given back. It needs no DeaDBeeF installed, and cannot
-  check DeaDBeeF's own half - what each decoder's tag writer does with a field
-  name - which is what the table above is from.
+* `ddb_rubato_hosttest` loads the plugin into a stand-in for DeaDBeeF
+  (`tests/fake_host.h`) - a playlist, track metadata and a decoder that
+  synthesises click tracks, one as float and one as 16-bit audio - and runs
+  every action through the worker threads: the fields written per container,
+  the attributions, the cue-sheet and unselected tracks left alone, scaling,
+  skipping tagged tracks, and every reference given back. It runs once without
+  windows and once with a window system that records what it is asked to show
+  (`tests/ui_recorder.cpp`), which covers the results window's model end to end
+  - columns, cells, doubling a row, Update writing each file once - along with
+  a cancelled scan, writing without the window, and tapping. It needs no
+  DeaDBeeF and no display, and cannot check DeaDBeeF's own half - what each
+  decoder's tag writer does with a field name - which is what the table above
+  is from.
+* `rubato_gtk_preview`, in a GTK build, puts the real GTK windows up over the
+  same stand-in with eight made-up tracks behind them, to look at them without
+  the player. Given a directory, it saves each window to a PNG there and
+  exits. It is not run by `ctest`, since it needs a display.
 
 Files
 -----
@@ -194,6 +278,10 @@ Files
 * `rubato_plugin.cpp` - the plugin: actions, settings, the worker threads,
   decoding through DeaDBeeF's decoders, and writing.
 * `rubato_format.h` - the strings and field names, with no DeaDBeeF in it.
-* `include/deadbeef/deadbeef.h` - DeaDBeeF's plugin header, from the 1.10.3
-  release tag, unmodified (zlib licence, in the file).
+* `rubato_results.h`, `rubato_results.cpp` - what the windows show and do,
+  with no toolkit in it.
+* `rubato_ui.h`, `ui_none.cpp`, `gtk/ui_gtk.cpp` - the windows.
+* `include/deadbeef/deadbeef.h`, `include/deadbeef/gtkui_api.h` - DeaDBeeF's
+  plugin header and its GTK interface's, from the 1.10.3 release tag,
+  unmodified (zlib licence, in each file).
 * `compat/msvc/` - the two POSIX headers `deadbeef.h` wants, for MSVC.

@@ -188,6 +188,113 @@ inline std::string format_retune_candidates(const bpmcore::key_analysis & key, i
 	return out;
 }
 
+// --- the results window ----------------------------------------------------
+//
+// Ports of foo_rubato/bpm_result_format.h and the window half of
+// bpm_key_format.h. Shared by every toolkit's results window, so a column
+// cannot read differently between the GTK and the Cocoa one.
+
+//! "±2.1", or blank where the track was too short to measure one.
+inline std::string format_spread(double spread)
+{
+	if (spread > 0) return "\xc2\xb1" + format_fixed(spread, 1);
+	return std::string();
+}
+
+//! "Dm (high)": the key never shown without how far to trust it.
+inline std::string format_key_column(const bpmcore::key_analysis & key)
+{
+	std::string out = format_key(key);
+	if (!out.empty()) out = out + " (" + bpmcore::key_confidence_name(key.confidence) + ")";
+	return out;
+}
+
+//! "-19.8 c", "?" where there was no steady pitch, and "(!)" within 5 cents
+//! of the semitone wrap, where the key beside it may be a semitone out.
+inline std::string format_tuning_column(const bpmcore::key_analysis & key)
+{
+	if (!key.ok) return std::string();
+	if (!key.tuning_ok) return "?";
+	std::string out = format_signed(key.tuning_cents, 1) + " c";
+	if (key.near_wrap) out += " (!)";
+	return out;
+}
+
+//! What the tuning means and what to do about it, at the length it needs.
+//! Lines are separated by bare newlines.
+inline std::string format_tuning_tooltip(const bpmcore::key_analysis & key, int year)
+{
+	std::string out;
+	if (!key.ok) return out;
+	if (!key.tuning_ok)
+	{
+		return "No steady pitch was found in this track, so its tuning was not "
+		       "measured. A spoken introduction, a run of applause, or surface "
+		       "noise on its own all look like this from here.";
+	}
+
+	out += "Tuning is " + format_signed(key.tuning_cents, 1)
+	     + " cents from A=440, and known only to within a semitone.";
+	if (key.near_wrap)
+		out += "\nThis one sits within 5 cents of the semitone wrap, so the key "
+		       "beside it may be a semitone out.";
+
+	enum { max_options = 4 };
+	bpmcore::retune_option opt[max_options];
+	const int n = bpmcore::suggest_retune(key.tuning_cents, year, opt, max_options);
+	if (n < 1)
+	{
+		out += "\n\n";
+		if (year <= 0)
+			out += "This file carries no recording year, so there is no pitch to "
+			       "correct towards - the offset is the same whether the side was "
+			       "cut at A=435 or the transfer simply runs fast. Set ORIGINALDATE "
+			       "or DATE and scan it again.";
+		else
+			out += "Recorded " + std::to_string(year) + ", by which time sides were cut "
+			       "at A=440 alone, so an offset this size belongs to the transfer rather "
+			       "than to a pitch standard.";
+		return out;
+	}
+
+	out += "\n";
+	for (int i = 0; i < n; i++)
+		out += "\n    " + format_signed(opt[i].percent, 2) + "%  to "
+		     + bpmcore::retune_target_name(opt[i].target);
+
+	out += "\n\nA plus means play it faster.";
+	if (n > 1)
+	{
+		bool wrapped = false, both_pitches = false;
+		for (int i = 0; i < n; i++)
+			for (int j = i + 1; j < n; j++)
+			{
+				if (opt[i].target == opt[j].target) wrapped = true;
+				else both_pitches = true;
+			}
+		out += " More than one fits the same measurement";
+		if (wrapped) out += ": the offset cannot tell a semitone apart";
+		if (wrapped && both_pitches) out += ", and ";
+		else if (both_pitches) out += ": ";
+		if (both_pitches) out += "both reference pitches are in range for " + std::to_string(year);
+		out += ". They are in the order that year makes likely.";
+	}
+	return out;
+}
+
+//! What the pointer resting on a row says: the title, where the column is
+//! drawing it cut short, and the tuning explained. Blank for nothing to say.
+inline std::string format_row_tooltip(const std::string & title, bool clipped,
+                                      const bpmcore::key_analysis & key, int year)
+{
+	const std::string tuning = format_tuning_tooltip(key, year);
+	if (tuning.empty() && !clipped) return std::string();
+	std::string out;
+	if (clipped || !tuning.empty()) out = title;
+	if (!tuning.empty()) out += (out.empty() ? "" : "\n\n") + tuning;
+	return out;
+}
+
 // --- which field -----------------------------------------------------------
 
 inline bool equals_ascii_nocase(const char * a, const char * b)
