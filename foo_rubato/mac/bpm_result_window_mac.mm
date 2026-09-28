@@ -217,7 +217,10 @@ static NSMutableArray<fooRubatoResultsWindow *> * g_openWindows = nil;
 	_doubleButton = [NSButton buttonWithTitle:@"Double" target:self action:@selector(onDouble:)];
 	_halveButton  = [NSButton buttonWithTitle:@"Halve"  target:self action:@selector(onHalve:)];
 
-	NSTextField * hint = [NSTextField labelWithString:@"Select rows to double or halve them."];
+	// A single track is doubled or halved without being selected.
+	NSTextField * hint = [NSTextField labelWithString:_model->results.size() == 1
+	                                                      ? @""
+	                                                      : @"Select rows to double or halve them."];
 	hint.textColor = NSColor.secondaryLabelColor;
 	hint.font = [NSFont systemFontOfSize:NSFont.smallSystemFontSize];
 
@@ -393,9 +396,18 @@ static NSMutableArray<fooRubatoResultsWindow *> * g_openWindows = nil;
 
 - (void)enableScaleButtons
 {
-	const BOOL any = _table.numberOfSelectedRows > 0;
+	const BOOL any = [self rowsToScale].count > 0;
 	_doubleButton.enabled = any;
 	_halveButton.enabled = any;
+}
+
+//! The selected rows, or the only row when there is just one: with a single
+//! track there is nothing to choose between, so it need not be selected first.
+- (NSIndexSet *)rowsToScale
+{
+	if (_table.numberOfSelectedRows == 0 && _table.numberOfRows == 1)
+		return [NSIndexSet indexSetWithIndex:0];
+	return _table.selectedRowIndexes;
 }
 
 // --- the buttons -----------------------------------------------------------
@@ -406,7 +418,7 @@ static NSMutableArray<fooRubatoResultsWindow *> * g_openWindows = nil;
 - (void)scaleSelectionBy:(double)factor
 {
 	results_model & model = *_model;
-	NSIndexSet * selected = _table.selectedRowIndexes;
+	NSIndexSet * selected = [self rowsToScale];
 
 	[selected enumerateIndexesUsingBlock:^(NSUInteger row, BOOL * stop) {
 		if (row >= model.results.size()) return;

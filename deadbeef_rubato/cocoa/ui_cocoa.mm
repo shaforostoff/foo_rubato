@@ -375,9 +375,18 @@ NSMutableSet<DdbRubatoWindow *> * open_windows = nil;
 
 - (void)enableScaleButtons
 {
-	const BOOL any = _table.numberOfSelectedRows > 0;
+	const BOOL any = [self rowsToScale].count > 0;
 	_doubleButton.enabled = any;
 	_halveButton.enabled = any;
+}
+
+//! The selected rows, or the only row when there is just one: with a single
+//! track there is nothing to choose between, so it need not be selected first.
+- (NSIndexSet *)rowsToScale
+{
+	if (_table.numberOfSelectedRows == 0 && _model->size() == 1)
+		return [NSIndexSet indexSetWithIndex:0];
+	return _table.selectedRowIndexes;
 }
 
 // --- the buttons -------------------------------------------------------------
@@ -385,10 +394,9 @@ NSMutableSet<DdbRubatoWindow *> * open_windows = nil;
 - (void)onDouble:(id)sender { [self scaleSelectionBy:2.0]; }
 - (void)onHalve:(id)sender { [self scaleSelectionBy:0.5]; }
 
-//! The double and halve buttons act on the rows highlighted.
 - (void)scaleSelectionBy:(double)factor
 {
-	NSIndexSet * selected = _table.selectedRowIndexes;
+	NSIndexSet * selected = [self rowsToScale];
 	rubato::results & model = *_model;
 	[selected enumerateIndexesUsingBlock:^(NSUInteger row, BOOL *) {
 		if (row < model.size()) model.scale(row, factor);

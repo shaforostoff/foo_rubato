@@ -112,28 +112,38 @@ void refresh_row(results_window & w, std::size_t row)
 		                   w.model->cell(row, columns[c]).c_str(), -1);
 }
 
-void update_scale_buttons(results_window & w)
+//! The rows the double and halve buttons act on: the ones highlighted, or the
+//! only row when there is just one - with a single track there is nothing to
+//! choose between, so it need not be selected first.
+std::vector<std::size_t> rows_to_scale(results_window & w)
 {
-	GtkTreeSelection * selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(w.view));
-	const bool any = gtk_tree_selection_count_selected_rows(selection) > 0;
-	gtk_widget_set_sensitive(w.double_button, any);
-	gtk_widget_set_sensitive(w.halve_button, any);
-}
-
-//! The double and halve buttons act on the rows highlighted.
-void scale_selection(results_window & w, double factor)
-{
+	std::vector<std::size_t> rows;
 	GtkTreeSelection * selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(w.view));
 	GList * paths = gtk_tree_selection_get_selected_rows(selection, nullptr);
 	for (GList * p = paths; p != nullptr; p = p->next)
 	{
 		const gint * indices = gtk_tree_path_get_indices(static_cast<GtkTreePath *>(p->data));
-		if (indices == nullptr) continue;
-		const std::size_t row = static_cast<std::size_t>(indices[0]);
+		if (indices != nullptr) rows.push_back(static_cast<std::size_t>(indices[0]));
+	}
+	g_list_free_full(paths, reinterpret_cast<GDestroyNotify>(gtk_tree_path_free));
+	if (rows.empty() && w.model->size() == 1) rows.push_back(0);
+	return rows;
+}
+
+void update_scale_buttons(results_window & w)
+{
+	const bool any = !rows_to_scale(w).empty();
+	gtk_widget_set_sensitive(w.double_button, any);
+	gtk_widget_set_sensitive(w.halve_button, any);
+}
+
+void scale_selection(results_window & w, double factor)
+{
+	for (std::size_t row : rows_to_scale(w))
+	{
 		w.model->scale(row, factor);
 		refresh_row(w, row);
 	}
-	g_list_free_full(paths, reinterpret_cast<GDestroyNotify>(gtk_tree_path_free));
 }
 
 //! The whole row's tooltip, wherever on the row the pointer rests - the

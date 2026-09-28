@@ -376,18 +376,27 @@ void bpm_result_dialog::EnableScaleBPMButtons()
 {
 	CListViewCtrl listView(GetDlgItem(ID_BPM_RESULT_LIST));
 
-	UINT selected = listView.GetSelectedCount();
+	// With a single track there is nothing to choose between, so the buttons
+	// work without it being selected first.
+	const bool enable = listView.GetSelectedCount() > 0 || listView.GetItemCount() == 1;
 
-	GetDlgItem(ID_DOUBLE_BPM_BUTTON).EnableWindow(selected > 0);
-	GetDlgItem(ID_HALVE_BPM_BUTTON).EnableWindow(selected > 0);
+	GetDlgItem(ID_DOUBLE_BPM_BUTTON).EnableWindow(enable);
+	GetDlgItem(ID_HALVE_BPM_BUTTON).EnableWindow(enable);
 }
 
 void bpm_result_dialog::ScaleSelectionBPM(double p_factor)
 {
 	CWindow result_list = GetDlgItem(ID_BPM_RESULT_LIST);
 
-	int listview_index = -1;
-	while ((listview_index = ListView_GetNextItem(result_list, listview_index, LVIS_SELECTED)) != -1)
+	// The selected rows, or the only row when there is just one.
+	std::vector<int> rows;
+	int selected_index = -1;
+	while ((selected_index = ListView_GetNextItem(result_list, selected_index, LVIS_SELECTED)) != -1)
+		rows.push_back(selected_index);
+	if (rows.empty() && ListView_GetItemCount(result_list) == 1)
+		rows.push_back(0);
+
+	for (int listview_index : rows)
 	{
 		if (static_cast<std::size_t>(listview_index) >= m_results.size()) continue;
 		bpm_track_result & r = m_results[listview_index];
