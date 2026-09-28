@@ -1,0 +1,14 @@
+#pragma once
+
+// Generated from rubato_version.h.in by CMake - do not edit. The version is
+// project(VERSION) in the top-level CMakeLists.txt, the same one foo_rubato
+// is built from, so a file tagged by either host names the same release.
+
+#define RUBATO_VERSION       "@RUBATO_VERSION@"
+#define RUBATO_VERSION_MAJOR @RUBATO_VERSION_MAJOR@
+#define RUBATO_VERSION_MINOR @RUBATO_VERSION_MINOR@
+
+// What BpmAlgorithm, KeyAlgorithm and TuningAlgorithm say. The same string
+// foo_rubato writes, so neither host takes the other's tags for a stranger's.
+#define RUBATO_ALGORITHM_NAME "Rubato"
+#define RUBATO_ALGORITHM      RUBATO_ALGORITHM_NAME ";v=" RUBATO_VERSION

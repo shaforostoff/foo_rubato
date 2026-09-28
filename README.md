@@ -143,6 +143,9 @@ room and is what to use on a machine that is already short.
   `bpm_key_format.h` is kept clear of the preferences page for.
 * `scripts/analysis/` is the Python reference implementation and the training
   pipeline that generates `bpmcore/rhythm_model.h`. See its README.
+* `deadbeef_rubato/` is the same analysis as a plugin for DeaDBeeF on Windows,
+  macOS and Linux, writing the same tags. It is a CMake project of its own and
+  needs no foobar2000 SDK; see its README.
 
 ### Settings
 
