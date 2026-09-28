@@ -4,6 +4,29 @@ Rubato BPM Analyzer for foobar2000
 Change Log
 ----------
 
+### Version 0.2.1
+
+* **A DeaDBeeF plugin.** `deadbeef_rubato/` is the same analysis, `bpmcore`
+  unchanged, as a plugin for DeaDBeeF 1.8 and later on Linux, Windows and
+  macOS, writing the same fields under the same rules - so a library tagged
+  by either player reads the same in the other. It has the results, progress
+  and tapping windows, in GTK 3 and in Cocoa, and builds with CMake or, for
+  DeaDBeeF's plugin builder, with GNU Make. See its README.
+
+* **A pause in tapping restarts the average.** The Windows tap dialog
+  subtracted the new tap from the last one, so the gap was always negative
+  and *Seconds to reset average* never took effect. The tap that ends the
+  pause now starts the new run, on Windows and macOS, rather than being
+  thrown away.
+
+* **Double and Halve act on a lone result.** With one track in the results
+  window there is nothing to choose between, so the buttons scale it without
+  it having to be selected first.
+
+* **Licensed under MIT,** with the licence in the about box. The original
+  foo_bpm code was under the WTFPL, which allows it; KISS FFT and PFFFT keep
+  their own licences.
+
 ### Version 0.2.0
 
 * **The key reaches the slot players read.** foobar2000 writes a field under
