@@ -648,7 +648,8 @@ int suggest_retune(double tuning_cents, int year, retune_option * out, int max_o
 }
 
 bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
-                 key_analysis & out, listener * l, int threads)
+                 key_analysis & out, listener * l, int threads,
+                 key_frames * frames_out)
 {
 	out = key_analysis();
 	if (mono == nullptr || count == 0 || sample_rate == 0) return false;
@@ -846,6 +847,15 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 			row[pc] += w;
 			full[pc] += w;
 		}
+	}
+
+	if (frames_out != nullptr)
+	{
+		frames_out->hop_seconds = static_cast<double>(hop) / sample_rate;
+		frames_out->frames = frames;
+		frames_out->chroma = frame_chroma;
+		frames_out->rms = rms;
+		frames_out->gate = static_cast<float>(plan.gate);
 	}
 
 	double sum = 0;
