@@ -7,6 +7,7 @@
 
 add_library(bpmcore STATIC
     analyse.cpp
+    features.cpp
     key.cpp
     odf.cpp
     real_fft.cpp
