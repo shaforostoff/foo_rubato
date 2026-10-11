@@ -67,29 +67,36 @@ bool file_info_filter_bpm::apply_filter(metadb_handle_ptr p_track, t_filestats p
 
 	const bpm_track_result & r = m_results[index];
 
-	format_bpm bpm_value(r.bpm);
-	p_info.meta_set(m_bpm_tag, bpm_value);
+	// A tempo the grid never settled on - or a tap with no interval in it yet
+	// - leaves the BPM fields as they were. Writing it would put a 0 over a
+	// hand tap, with an attribution vouching for the 0. The key and tuning
+	// below stand on their own, as in the DeaDBeeF plugin.
+	if (r.bpm > 0)
+	{
+		format_bpm bpm_value(r.bpm);
+		p_info.meta_set(m_bpm_tag, bpm_value);
 
-	// Record what produced the number, or clear an attribution that is no
-	// longer true. Only a BPM the analysis stands behind is stamped: for one
-	// tapped by hand, or doubled or halved by the user, an attribution left
-	// over from an earlier scan would be claiming credit for a number the
-	// analysis did not produce.
-	//
-	// The clearing is not the preferences page's to switch off. Turning the
-	// attribution off means this component stops adding one, not that it
-	// starts leaving behind a claim it knows to be false - which is the whole
-	// value of the field, its presence being what marks a BPM as measured
-	// rather than tapped.
-	const bool ours = m_from_analysis && !r.adjusted;
-	if (!ours) p_info.meta_remove_field(BPM_ALGORITHM_TAG);
-	else if (m_write_algorithm) p_info.meta_set(BPM_ALGORITHM_TAG, FOO_RUBATO_ALGORITHM);
+		// Record what produced the number, or clear an attribution that is no
+		// longer true. Only a BPM the analysis stands behind is stamped: for one
+		// tapped by hand, or doubled or halved by the user, an attribution left
+		// over from an earlier scan would be claiming credit for a number the
+		// analysis did not produce.
+		//
+		// The clearing is not the preferences page's to switch off. Turning the
+		// attribution off means this component stops adding one, not that it
+		// starts leaving behind a claim it knows to be false - which is the whole
+		// value of the field, its presence being what marks a BPM as measured
+		// rather than tapped.
+		const bool ours = m_from_analysis && !r.adjusted;
+		if (!ours) p_info.meta_remove_field(BPM_ALGORITHM_TAG);
+		else if (m_write_algorithm) p_info.meta_set(BPM_ALGORITHM_TAG, FOO_RUBATO_ALGORITHM);
 
-	// The tempo the track opens at, which on a side that eases off for the
-	// singer is several BPM above the figure for the whole of it.
-	pfc::string8 initial;
-	if (m_from_analysis && r.initial_bpm > 0) initial = format_bpm(r.initial_bpm);
-	set_or_remove(p_info, BPM_INITIAL_TAG, initial, m_write_initial);
+		// The tempo the track opens at, which on a side that eases off for the
+		// singer is several BPM above the figure for the whole of it.
+		pfc::string8 initial;
+		if (m_from_analysis && r.initial_bpm > 0) initial = format_bpm(r.initial_bpm);
+		set_or_remove(p_info, BPM_INITIAL_TAG, initial, m_write_initial);
+	}
 
 	if (!m_rhythm_tag.is_empty() && !r.rhythm.is_empty())
 		p_info.meta_set(m_rhythm_tag, r.rhythm);
