@@ -134,6 +134,8 @@ void bpm_manual_dialog::SetBPM(double bpm)
 {
 	m_bpm = bpm;
 	uSetDlgItemText(m_hWnd, ID_BPM_MANUAL_BPM, format_bpm(m_bpm));
+	// Nothing to write until two taps make an interval, as on macOS.
+	GetDlgItem(ID_BPM_MANUAL_UPDATE_TAG_BUTTON).EnableWindow(m_bpm > 0);
 }
 
 
