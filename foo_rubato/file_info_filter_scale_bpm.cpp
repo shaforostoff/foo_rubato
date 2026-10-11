@@ -5,6 +5,8 @@
 #include "format_bpm.h"
 #include "globals.h"
 
+#include <deadbeef_rubato/rubato_format.h>
+
 file_info_filter_scale_bpm::file_info_filter_scale_bpm(const char * p_bpm_tag, double p_scale)
 	: m_bpm_tag(p_bpm_tag)
 	, m_scale(p_scale)
@@ -15,14 +17,12 @@ bool file_info_filter_scale_bpm::apply_filter(metadb_handle_ptr p_track, t_files
 {
 	const char * str = p_info.meta_get(m_bpm_tag, 0);
 
-	// Plain sscanf rather than MSVC's sscanf_s: %f takes no buffer, so the two
-	// differ in nothing here but which compilers have them.
-	float bpm = 0.0f;
-	if ((str != NULL) && (sscanf(str, "%f", &bpm) == 1))
+	// rubato::parse_decimal rather than sscanf, which stops at a comma: a tag
+	// holding "120,5" doubled to 240 instead of 241.
+	double bpm = 0.0;
+	if (rubato::parse_decimal(str, bpm))
 	{
-		bpm = static_cast<float>(bpm * m_scale);
-
-		p_info.meta_set(m_bpm_tag, format_bpm(bpm));
+		p_info.meta_set(m_bpm_tag, format_bpm(bpm * m_scale));
 
 		// Doubling or halving is the user overruling the measurement, so the
 		// analysis no longer stands behind the value and its attribution goes.
@@ -37,13 +37,9 @@ bool file_info_filter_scale_bpm::apply_filter(metadb_handle_ptr p_track, t_files
 		// it is scaled rather than dropped: halving the BPM because the
 		// analysis picked the wrong level means the opening was on the wrong
 		// level too, and the same factor puts both right.
-		const char * initial_str = p_info.meta_get(BPM_INITIAL_TAG, 0);
-		float initial = 0.0f;
-		if ((initial_str != NULL) && (sscanf(initial_str, "%f", &initial) == 1) && initial > 0)
-		{
-			p_info.meta_set(BPM_INITIAL_TAG,
-			                format_bpm(static_cast<double>(initial) * m_scale));
-		}
+		double initial = 0.0;
+		if (rubato::parse_decimal(p_info.meta_get(BPM_INITIAL_TAG, 0), initial) && initial > 0)
+			p_info.meta_set(BPM_INITIAL_TAG, format_bpm(initial * m_scale));
 
 		return true;
 	}

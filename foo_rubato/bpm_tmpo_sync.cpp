@@ -5,8 +5,9 @@
 #include "bpm_tag_fields.h"
 #include "mp4_tmpo.h"
 
+#include <deadbeef_rubato/rubato_format.h>
+
 #include <cmath>
-#include <cstdlib>
 #include <cstring>
 
 namespace
@@ -63,7 +64,7 @@ namespace
 		{
 			metadb_info_container::ptr info = track->get_full_info_ref(fb2k::noAbort);
 			const char * value = info.is_valid() ? info->info().meta_get(bpm_tag, 0) : nullptr;
-			if (value != nullptr) bpm = std::atof(value);
+			rubato::parse_decimal(value, bpm);   // "120,5" as well as "120.5"
 		}
 		catch (...) { return; }
 		const long rounded = std::lround(bpm);
