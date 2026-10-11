@@ -207,9 +207,12 @@ inline mp4_tmpo_result mp4_set_tmpo(mp4_io & io, std::uint16_t bpm)
 		if (!io.write(at, atom, sizeof atom)) return mp4_tmpo_io_error;
 	}
 
-	// And the four boxes that now hold 26 more bytes.
-	if (!rewrite_size(io, ilst, 26) || !rewrite_size(io, meta, 26) ||
-	    !rewrite_size(io, udta, 26) || !rewrite_size(io, moov, 26))
+	// And the four boxes that now hold 26 more bytes, outermost first: stopped
+	// after any one of these writes, the atom is an unknown box trailing the
+	// last one grown, which readers skip. Innermost first, ilst would claim
+	// bytes past the end of the meta holding it.
+	if (!rewrite_size(io, moov, 26) || !rewrite_size(io, udta, 26) ||
+	    !rewrite_size(io, meta, 26) || !rewrite_size(io, ilst, 26))
 		return mp4_tmpo_io_error;
 	return mp4_tmpo_inserted;
 }
