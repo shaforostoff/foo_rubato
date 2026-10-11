@@ -89,8 +89,7 @@ private:
 	//! the ones the double and halve buttons scale, which is why the window
 	//! owns a copy rather than reading the analysis back.
 	std::vector<bpm_track_result> m_results;
-	//! Whatever the BPM tag held before the scan, per track, taken in the
-	//! constructor because ScaleSelectionBPM writes over m_infos later. On this
+	//! Whatever the BPM tag held before the scan, per track. On this
 	//! collection those are hand-tapped values, which is the whole reason for
 	//! showing them: the measurement can be read against the tap.
 	std::vector<pfc::string8> m_tag_bpms;

@@ -19,8 +19,7 @@ bpm_result_dialog::bpm_result_dialog(metadb_handle_list_cref p_tracks,
 	m_infos(p_infos),
 	m_results(p_results)
 {
-	// Read before anything here can write to m_infos. Kept as the string the
-	// file carried rather than a parsed number: it is being shown for
+	// Kept as the string the file carried rather than a parsed number: it is being shown for
 	// comparison, and rounding someone's tap on the way to the screen would
 	// defeat the point.
 	const pfc::string8 bpm_tag = bpm_tag_name();
@@ -404,8 +403,6 @@ void bpm_result_dialog::ScaleSelectionBPM(double p_factor)
 		r.adjusted = true;
 
 		format_bpm bpm_value(r.bpm);
-
-		m_infos[listview_index].meta_set(bpm_tag_name(), bpm_value);
 		listview_helper::set_item_text(result_list, listview_index, m_col_bpm, bpm_value);
 
 		// The fluctuation and the opening tempo are both quoted in BPM at the
