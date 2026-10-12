@@ -5,6 +5,19 @@
 #include <cmath>
 #include <cstdint>
 
+// x86 always has SSE2 where this is built: it is the x64 baseline, and the
+// 32-bit Windows build asks for it. arm64 always has NEON, and contracts a
+// multiply-add into a fused one by default under clang and GCC alike, which
+// is the arithmetic the NEON lanes reproduce. Under MSVC that contraction is
+// not the default, so its arm64 build takes the plain loop.
+#if defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+#include <emmintrin.h>
+#define BPMCORE_DOT_SSE2
+#elif defined(__aarch64__) && !defined(_MSC_VER)
+#include <arm_neon.h>
+#define BPMCORE_DOT_NEON
+#endif
+
 namespace bpmcore
 {
 
@@ -58,18 +71,35 @@ namespace
 	//! scalar. Four accumulators let it use the whole vector unit, and are still
 	//! deterministic - which matters, because the answer must not depend on how
 	//! the work was divided.
+	//!
+	//! The four sums are spelled out as one vector where the instruction set is
+	//! known. Left to itself clang paired lanes 0 and 2 against 1 and 3, to make
+	//! the final sum cheap, and fed them with eight scalar loads a step; on arm64
+	//! it kept four scalar chains. The lanes do exactly the arithmetic the plain
+	//! loop below does on each platform - a multiply then an add on x86, which
+	//! has no fused form before AVX2, and a fused multiply-add on arm64, which is
+	//! what the compiler contracted the plain loop to - so the result is the same
+	//! to the bit either way.
 	float dot(const float * coeff, const float * x, int taps)
 	{
-		float a0 = 0.0f, a1 = 0.0f, a2 = 0.0f, a3 = 0.0f;
+		float a[4];
 		int k = 0;
+#if defined(BPMCORE_DOT_SSE2)
+		__m128 v = _mm_setzero_ps();
 		for (; k + 4 <= taps; k += 4)
-		{
-			a0 += coeff[k]     * x[k];
-			a1 += coeff[k + 1] * x[k + 1];
-			a2 += coeff[k + 2] * x[k + 2];
-			a3 += coeff[k + 3] * x[k + 3];
-		}
-		float acc = (a0 + a1) + (a2 + a3);
+			v = _mm_add_ps(v, _mm_mul_ps(_mm_loadu_ps(coeff + k), _mm_loadu_ps(x + k)));
+		_mm_storeu_ps(a, v);
+#elif defined(BPMCORE_DOT_NEON)
+		float32x4_t v = vdupq_n_f32(0.0f);
+		for (; k + 4 <= taps; k += 4)
+			v = vfmaq_f32(v, vld1q_f32(coeff + k), vld1q_f32(x + k));
+		vst1q_f32(a, v);
+#else
+		a[0] = a[1] = a[2] = a[3] = 0.0f;
+		for (; k + 4 <= taps; k += 4)
+			for (int j = 0; j < 4; j++) a[j] += coeff[k + j] * x[k + j];
+#endif
+		float acc = (a[0] + a[1]) + (a[2] + a[3]);
 		for (; k < taps; k++) acc += coeff[k] * x[k];
 		return acc;
 	}
@@ -222,15 +252,9 @@ void resampler::process(const float * in, std::size_t count, std::vector<float> 
 	out.resize(first + static_cast<std::size_t>(end - m_produced));
 	float * dst = out.data() + first;
 
-	const int taps = m_taps;
-	for (std::int64_t n = m_produced; n < end; n++)
-	{
-		const std::int64_t at = n * m_decim + m_delay;
-		// The oldest input sample this output reads. Guaranteed inside m_work:
-		// `end` is exactly the point at which it stops being.
-		*dst++ = dot(m_coeff.data() + static_cast<std::size_t>(at % m_phases) * taps,
-		             m_work.data() + (at / m_phases - (taps - 1) - origin), taps);
-	}
+	// Every input sample these outputs read is inside m_work: `end` is exactly
+	// the point at which the newest stops being.
+	render(m_produced, end, m_work.data(), origin, dst);
 	m_produced = end;
 
 	m_hist.assign(m_work.end() - history, m_work.end());
@@ -258,6 +282,35 @@ void resampler::flush(std::vector<float> & out)
 	{
 		out.resize(out.size() - static_cast<std::size_t>(m_produced - want));
 		m_produced = want;
+	}
+}
+
+void resampler::render(std::int64_t from, std::int64_t to, const float * src,
+                       std::int64_t origin, float * dst) const
+{
+	if (from >= to) return;
+
+	// Output n reads input samples at/L - taps + 1 through at/L with phase
+	// at % L, where at = n*M + delay. Each output adds M to `at`, so both are
+	// carried from one output to the next rather than divided out afresh. A
+	// 64-bit division per output sample was a sixth of the conversion time on
+	// a Haswell.
+	const int taps = m_taps;
+	const std::int64_t at = from * m_decim + m_delay;
+	std::int64_t i = at / m_phases - (taps - 1) - origin;
+	int phase = static_cast<int>(at % m_phases);
+	const std::int64_t whole = m_decim / m_phases;
+	const int part = static_cast<int>(m_decim % m_phases);
+	for (std::int64_t n = from; n < to; n++)
+	{
+		*dst++ = dot(m_coeff.data() + static_cast<std::size_t>(phase) * taps, src + i, taps);
+		i += whole;
+		phase += part;
+		if (phase >= m_phases)
+		{
+			phase -= m_phases;
+			i++;
+		}
 	}
 }
 
@@ -308,7 +361,6 @@ void resampler::convert_all(const float * in, std::size_t count,
 	for (std::int64_t n = hi; n < total; n++)
 		dst[n] = tap_edges(n * m_decim + m_delay, in, count);
 
-	const int taps = m_taps;
 	const int n_threads = resolve_threads(threads, static_cast<int>(hi - lo),
 	                                      min_outputs_per_thread);
 	const std::int64_t per_block =
@@ -320,12 +372,7 @@ void resampler::convert_all(const float * in, std::size_t count,
 	{
 		const std::int64_t begin = lo + static_cast<std::int64_t>(b) * per_block;
 		const std::int64_t stop = std::min(hi, begin + per_block);
-		for (std::int64_t n = begin; n < stop; n++)
-		{
-			const std::int64_t at = n * m_decim + m_delay;
-			dst[n] = dot(m_coeff.data() + static_cast<std::size_t>(at % m_phases) * taps,
-			             in + (at / m_phases - (taps - 1)), taps);
-		}
+		render(begin, stop, in, 0, dst + begin);
 	});
 
 	// A one-shot conversion is the whole track, so the streaming state is left

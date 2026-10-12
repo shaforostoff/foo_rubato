@@ -88,6 +88,10 @@ public:
 	                 int threads);
 
 private:
+	//! Outputs [from, to) into `dst`, all of whose input samples are present:
+	//! input sample i is read at src[i - origin].
+	void render(std::int64_t from, std::int64_t to, const float * src,
+	            std::int64_t origin, float * dst) const;
 	//! One output sample, from input samples that may run off either end.
 	float tap_edges(std::int64_t at, const float * in, std::size_t count) const;
 
