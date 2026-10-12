@@ -4,6 +4,42 @@ Rubato BPM Analyzer for foobar2000
 Change Log
 ----------
 
+### Version 0.2.2
+
+* **A track with no tempo leaves its BPM alone.** A file too short, silent or
+  unreadable to measure came back with a BPM of 0, and both the results
+  window and *write tags automatically* wrote it - over a hand tap if there
+  was one, removing INITIALBPM with it. Those fields are now only written
+  for a tempo above zero; the key and tuning are still written on their own
+  terms. The tap window's *Update file* button likewise stays disabled until
+  there are enough taps for a BPM.
+
+* **Double and Halve read a comma decimal point.** A BPM tag of `120,5`
+  doubled to 240 rather than 241, and an m4a got a `tmpo` of 120.
+
+* **Safer `tmpo` insertion into m4a files.** The enclosing boxes are now
+  grown outermost first, so a write interrupted part way leaves a file that
+  strict readers still accept. The finished file is unchanged.
+
+* **No crash when a thread cannot start.** A 32-bit foobar2000 short of
+  address space could be taken down by the analysis failing to start a
+  worker thread. It now carries on with the threads it has, with the same
+  answer.
+
+* **Faster analysis.** The key stage's sliding median, the resampler and the
+  onset envelope were reworked: the whole analysis is about 1.5x faster on a
+  Haswell, and the envelope about twice as fast in the 32-bit build. Results
+  are bit-identical to 0.2.1 except for the envelope's logarithm, which
+  across 3,633 tracks moved no rhythm, meter or metrical level and no tempo
+  by more than 0.0001 BPM.
+
+* **DeaDBeeF:** the context submenu is named *Rubato BPM Analyser* rather
+  than *Rubato*.
+
+* **For developers:** `bpmcore::extract_features` returns the per-frame
+  chroma and onset novelty an audio fingerprint is built from, and
+  `compute_key` can hand back its per-frame chroma and loudness.
+
 ### Version 0.2.1
 
 * **A DeaDBeeF plugin.** `deadbeef_rubato/` is the same analysis, `bpmcore`
