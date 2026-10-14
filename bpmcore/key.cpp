@@ -293,7 +293,16 @@ namespace
 			m_tmp.resize(n);
 			m_rank.resize(n);
 			std::memcpy(m_key.data(), v, n * sizeof *v);
-			for (int i = 0; i < count; i++) m_order[i] = i;
+
+			// Raw pointers, held in locals for the whole sort. Through the
+			// vectors, every store to an int made the compiler reload each
+			// vector's data pointer in case the store had changed it, and the
+			// 32-bit build, out of registers, kept the loop counter on the stack
+			// as well.
+			const std::uint32_t * const key = m_key.data();
+			int * order = m_order.data();
+			int * tmp = m_tmp.data();
+			for (int i = 0; i < count; i++) order[i] = i;
 
 			// Least significant byte first. Each pass is stable, so values that
 			// tie stay in bin order. A pass whose byte is the same everywhere
@@ -301,18 +310,22 @@ namespace
 			for (int shift = 0; shift < 32; shift += 8)
 			{
 				int at[256] = { 0 };
-				for (int i = 0; i < count; i++) at[(m_key[i] >> shift) & 255]++;
-				if (at[(m_key[0] >> shift) & 255] == count) continue;
+				for (int i = 0; i < count; i++) at[(key[i] >> shift) & 255]++;
+				if (at[(key[0] >> shift) & 255] == count) continue;
 				int sum = 0;
 				for (int b = 0; b < 256; b++) { const int c = at[b]; at[b] = sum; sum += c; }
 				for (int i = 0; i < count; i++)
 				{
-					const int idx = m_order[i];
-					m_tmp[at[(m_key[idx] >> shift) & 255]++] = idx;
+					const int idx = order[i];
+					tmp[at[(key[idx] >> shift) & 255]++] = idx;
 				}
-				m_order.swap(m_tmp);
+				std::swap(order, tmp);
 			}
-			for (int r = 0; r < count; r++) m_rank[m_order[r]] = r;
+			// An odd number of passes leaves the order in m_tmp's storage.
+			if (order != m_order.data()) m_order.swap(m_tmp);
+			order = m_order.data();
+			int * const rank_of = m_rank.data();
+			for (int r = 0; r < count; r++) rank_of[order[r]] = r;
 
 			// One spare word, so a search that starts just past the last rank
 			// still reads inside the buffer.
