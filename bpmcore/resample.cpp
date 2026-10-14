@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 
 // x86 always has SSE2 where this is built: it is the x64 baseline, and the
@@ -65,6 +66,16 @@ namespace
 	const int blocks_per_thread = 8;
 	const int min_outputs_per_thread = 8192;
 
+	//! The four lanes summed, then the taps left over past the last whole four.
+	//! One function for `dot` and `dot2` both, so the two cannot drift apart.
+	inline float dot_tail(const float * a, const float * coeff, const float * x,
+	                      int k, int taps)
+	{
+		float acc = (a[0] + a[1]) + (a[2] + a[3]);
+		for (; k < taps; k++) acc += coeff[k] * x[k];
+		return acc;
+	}
+
 	//! `taps` products, in four independent sums.
 	//!
 	//! MSVC will not reassociate float addition, so a single running total stays
@@ -99,9 +110,51 @@ namespace
 		for (; k + 4 <= taps; k += 4)
 			for (int j = 0; j < 4; j++) a[j] += coeff[k + j] * x[k + j];
 #endif
-		float acc = (a[0] + a[1]) + (a[2] + a[3]);
-		for (; k < taps; k++) acc += coeff[k] * x[k];
-		return acc;
+		return dot_tail(a, coeff, x, k, taps);
+	}
+
+	//! Two outputs' dot products at once, each the same to the bit as `dot`.
+	//!
+	//! Each output's four lanes are one dependent chain of adds, three cycles a
+	//! step, and the multiplies and loads around it are cheap. A core with a
+	//! deep enough out-of-order window overlaps the next output's chain with
+	//! this one by itself; a Haswell's fills before it gets far. Interleaving
+	//! two outputs in one loop hands it the second chain directly, and on a
+	//! Haswell the conversion of a side measured a fifth faster from 48kHz and
+	//! a quarter from 96kHz, streaming or not. Neither output's arithmetic
+	//! changes.
+	void dot2(const float * c0, const float * x0, const float * c1, const float * x1,
+	          int taps, float * out)
+	{
+#if defined(BPMCORE_DOT_SSE2) || defined(BPMCORE_DOT_NEON)
+		float a0[4], a1[4];
+		const int whole = taps & ~3;
+		int k = 0;
+#if defined(BPMCORE_DOT_SSE2)
+		__m128 v0 = _mm_setzero_ps(), v1 = _mm_setzero_ps();
+		for (; k < whole; k += 4)
+		{
+			v0 = _mm_add_ps(v0, _mm_mul_ps(_mm_loadu_ps(c0 + k), _mm_loadu_ps(x0 + k)));
+			v1 = _mm_add_ps(v1, _mm_mul_ps(_mm_loadu_ps(c1 + k), _mm_loadu_ps(x1 + k)));
+		}
+		_mm_storeu_ps(a0, v0);
+		_mm_storeu_ps(a1, v1);
+#else
+		float32x4_t v0 = vdupq_n_f32(0.0f), v1 = vdupq_n_f32(0.0f);
+		for (; k < whole; k += 4)
+		{
+			v0 = vfmaq_f32(v0, vld1q_f32(c0 + k), vld1q_f32(x0 + k));
+			v1 = vfmaq_f32(v1, vld1q_f32(c1 + k), vld1q_f32(x1 + k));
+		}
+		vst1q_f32(a0, v0);
+		vst1q_f32(a1, v1);
+#endif
+		out[0] = dot_tail(a0, c0, x0, k, taps);
+		out[1] = dot_tail(a1, c1, x1, k, taps);
+#else
+		out[0] = dot(c0, x0, taps);
+		out[1] = dot(c1, x1, taps);
+#endif
 	}
 
 	//! Modified Bessel function of the first kind, order zero.
@@ -295,23 +348,43 @@ void resampler::render(std::int64_t from, std::int64_t to, const float * src,
 	// carried from one output to the next rather than divided out afresh. A
 	// 64-bit division per output sample was a sixth of the conversion time on
 	// a Haswell.
+	//
+	// The input position is carried as a pointer rather than a 64-bit index:
+	// in the 32-bit build the index and the output count took four registers
+	// between them, and both went through the stack on every output.
 	const int taps = m_taps;
+	const int phases = m_phases;
 	const std::int64_t at = from * m_decim + m_delay;
-	std::int64_t i = at / m_phases - (taps - 1) - origin;
-	int phase = static_cast<int>(at % m_phases);
-	const std::int64_t whole = m_decim / m_phases;
-	const int part = static_cast<int>(m_decim % m_phases);
-	for (std::int64_t n = from; n < to; n++)
+	const float * x = src + (at / phases - (taps - 1) - origin);
+	int phase = static_cast<int>(at % phases);
+	const std::ptrdiff_t whole = static_cast<std::ptrdiff_t>(m_decim / phases);
+	const int part = m_decim % phases;
+	const float * const coeff = m_coeff.data();
+	const auto advance = [&]()
 	{
-		*dst++ = dot(m_coeff.data() + static_cast<std::size_t>(phase) * taps, src + i, taps);
-		i += whole;
+		x += whole;
 		phase += part;
-		if (phase >= m_phases)
+		if (phase >= phases)
 		{
-			phase -= m_phases;
-			i++;
+			phase -= phases;
+			x++;
 		}
+	};
+
+	// Two outputs at a time - see `dot2`. Which outputs are paired cannot
+	// change either one, so how the range was divided still does not matter.
+	std::int64_t left = to - from;
+	for (; left >= 2; left -= 2)
+	{
+		const float * const x0 = x;
+		const int p0 = phase;
+		advance();
+		dot2(coeff + static_cast<std::size_t>(p0) * taps, x0,
+		     coeff + static_cast<std::size_t>(phase) * taps, x, taps, dst);
+		advance();
+		dst += 2;
 	}
+	if (left > 0) *dst = dot(coeff + static_cast<std::size_t>(phase) * taps, x, taps);
 }
 
 float resampler::tap_edges(std::int64_t at, const float * in, std::size_t count) const
