@@ -200,9 +200,7 @@ namespace
 				// double whatever the transform's width: the window carries the
 				// loudness normalisation, and rounding it to the input's width
 				// before multiplying would quantise that.
-				fft_scalar * frame = m_fft.input();
-				for (int i = 0; i < p.nfft; i++)
-					frame[i] = static_cast<fft_scalar>(src[i] * p.window[i]);
+				m_fft.window_from(src, p.window);
 				m_fft.forward();
 
 				// Two tight loops rather than one fused one. Computing the whole

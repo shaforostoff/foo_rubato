@@ -458,9 +458,7 @@ namespace
 		{
 			const key_plan & p = m_plan;
 			const float * src = p.mono + static_cast<std::size_t>(f) * p.hop;
-			fft_scalar * in = m_fft.input();
-			for (int i = 0; i < p.nfft; i++)
-				in[i] = static_cast<fft_scalar>(src[i] * p.window[i]);
+			m_fft.window_from(src, p.window);
 			m_fft.forward();
 
 			// Magnitudes over the search band plus the median's reach either
