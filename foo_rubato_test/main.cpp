@@ -201,6 +201,12 @@ int main()
 	// --- the tag schema, exactly as key-detection-feature-plan.md sets it out
 	check_str(bpm_format_key(k), "Dm", "KEY");
 	check_str(bpm_format_key_candidates(k), "Dm:0.866 C:0.702 Gm:0.701", "KEYCANDIDATES");
+	check_str(bpm_format_key_pair(k), "Dm/C", "KEYS");
+	{
+		bpmcore::key_analysis one = k;
+		one.candidate_count = 1;
+		check_str(bpm_format_key_pair(one), "Dm", "KEYS, one candidate");
+	}
 	check_str(bpm_format_key_confidence(k), "high", "KEYCONFIDENCE");
 	check_str(bpm_format_mode_balance(k), "40% major, 7 switches", "MODEBALANCE");
 	check_str(bpm_format_tuning(k), "-19.8", "TUNING");
@@ -261,6 +267,7 @@ int main()
 	check(!none.ok, "a default key_analysis is not ok");
 	check_str(bpm_format_key(none), "", "no key");
 	check_str(bpm_format_key_candidates(none), "", "no candidates");
+	check_str(bpm_format_key_pair(none), "", "no KEYS");
 	check_str(bpm_format_key_confidence(none), "", "no confidence");
 	check_str(bpm_format_mode_balance(none), "", "no mode balance");
 	check_str(bpm_format_tuning(none), "", "no tuning");

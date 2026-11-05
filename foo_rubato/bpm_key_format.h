@@ -73,6 +73,22 @@ inline pfc::string8 bpm_format_key_candidates(const bpmcore::key_analysis & key)
 	return out;
 }
 
+//! The first two candidates, slash-separated - "C/Cm" - for a player that
+//! shows one short field. The first alone when it is the only candidate.
+inline pfc::string8 bpm_format_key_pair(const bpmcore::key_analysis & key)
+{
+	pfc::string8 out;
+	if (!key.ok) return out;
+	int taken = 0;
+	for (int i = 0; i < key.candidate_count && taken < 2; i++)
+	{
+		if (key.candidates[i].root < 0) continue;
+		if (taken++ > 0) out << "/";
+		out << bpmcore::key_name(key.candidates[i].root, key.candidates[i].minor);
+	}
+	return out;
+}
+
 inline pfc::string8 bpm_format_key_confidence(const bpmcore::key_analysis & key)
 {
 	pfc::string8 out;

@@ -34,6 +34,12 @@
 // know what it is called.
 #define BPM_INITIAL_TAG "INITIALBPM"
 
+// The BPM as a floating-point value, beside the configured BPM tag, which is
+// rounded to the precision set on the preferences page. Written to two
+// decimals - the grid is not finer than that - and under this name in every
+// container, like INITIALBPM.
+#define BPM_FBPM_TAG "FBPM"
+
 // The standard genre field - TCON in ID3, the genre atom in MP4 - which gets
 // the detected dance when it is empty. See bpm_genre_to_write.
 #define BPM_GENRE_TAG "GENRE"
@@ -43,19 +49,20 @@
 // beaTunes already writes in cents, so the two can sit in one library without
 // either having to be told about the other.
 //
-// KEY holds one answer because that is what a player or a DJ tool will read -
-// and so does the container's standard key slot, which is the copy most of
-// them actually find: TKEY in ID3, "initialkey" in MP4, INITIALKEY in a Vorbis
-// comment. Which field name reaches which slot is bpm_initial_key_field's
-// business, in bpm_tag_fields.h. KEY stays as well, so files tagged before the
-// slot was written keep a field that means the same thing.
+// The key holds one answer because that is what a player or a DJ tool will
+// read, and it goes in one field: the container's standard key slot - TKEY in
+// ID3, "initialkey" in MP4, INITIALKEY in a Vorbis comment. Which field name
+// reaches which slot is bpm_initial_key_field's business, in bpm_tag_fields.h.
+// Earlier versions also wrote a plain KEY; it is no longer written, and one
+// already on a file is left alone.
 //
 // KEYCANDIDATES holds all three with their scores, which is where the rest of
 // what was measured is: the first is right 79% of the time and the true key
 // is in the three 95% of the time. KEYCONFIDENCE says which of those
 // two numbers applies to this track.
-#define BPM_KEY_TAG              "KEY"
 #define BPM_KEY_CANDIDATES_TAG   "KEYCANDIDATES"
+// The first two candidates as "C/Cm" - KEYCANDIDATES without the scores.
+#define BPM_KEY_PAIR_TAG         "KEYS"
 #define BPM_KEY_CONFIDENCE_TAG   "KEYCONFIDENCE"
 #define BPM_MODE_BALANCE_TAG     "MODEBALANCE"
 #define BPM_TUNING_TAG           "TUNING"
@@ -69,9 +76,12 @@ extern cfg_string bpm_config_bpm_tag;
 extern cfg_bool bpm_config_auto_write_tag;
 extern cfg_bool bpm_config_write_initial_bpm;
 extern cfg_bool bpm_config_write_bpm_algorithm;
+extern cfg_bool bpm_config_write_fbpm;
 // Tuning and key
 extern cfg_bool bpm_config_detect_key;
 extern cfg_bool bpm_config_write_key;
+extern cfg_bool bpm_config_write_key_candidates;
+extern cfg_bool bpm_config_write_key_pair;
 extern cfg_bool bpm_config_write_tuning;
 extern cfg_bool bpm_config_write_retune;
 // Diagnostics

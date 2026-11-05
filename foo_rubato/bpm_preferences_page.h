@@ -27,9 +27,12 @@ class bpm_preferences_page : public preferences_page_instance, public CDialogImp
 			COMMAND_HANDLER_EX(ID_CONFIG_AUTO_WRITE_TAG, BN_CLICKED, OnBnClicked)
 			COMMAND_HANDLER_EX(ID_CONFIG_WRITE_INITIAL_BPM, BN_CLICKED, OnBnClicked)
 			COMMAND_HANDLER_EX(ID_CONFIG_WRITE_BPM_ALGORITHM, BN_CLICKED, OnBnClicked)
+			COMMAND_HANDLER_EX(ID_CONFIG_WRITE_FBPM, BN_CLICKED, OnBnClicked)
 			// Tuning and key
 			COMMAND_HANDLER_EX(ID_CONFIG_DETECT_KEY, BN_CLICKED, OnBnClicked)
 			COMMAND_HANDLER_EX(ID_CONFIG_WRITE_KEY, BN_CLICKED, OnBnClicked)
+			COMMAND_HANDLER_EX(ID_CONFIG_WRITE_KEY_CANDIDATES, BN_CLICKED, OnBnClicked)
+			COMMAND_HANDLER_EX(ID_CONFIG_WRITE_KEY_PAIR, BN_CLICKED, OnBnClicked)
 			COMMAND_HANDLER_EX(ID_CONFIG_WRITE_TUNING, BN_CLICKED, OnBnClicked)
 			COMMAND_HANDLER_EX(ID_CONFIG_WRITE_RETUNE, BN_CLICKED, OnBnClicked)
 			// Diagnostics
@@ -44,7 +47,9 @@ class bpm_preferences_page : public preferences_page_instance, public CDialogImp
 		void OnEditControlChange(UINT uNotifyCode, int nID, CWindow wndCtl);
 		void OnComboBoxChange(UINT uNotifyCode, int nID, CWindow wndCtl);
 		void OnBnClicked(UINT uNotifyCode, int nID, CWindow wndCtl);
-		//! Greys the three write switches while detection itself is off.
+		//! Greys the write switches while detection itself is off, and the
+		//! KEYCANDIDATES and KEYS switches while the key is off, since they go
+		//! with it.
 		void EnableKeyWriteButtons();
 		bool HasChanged();
 		void OnChanged();

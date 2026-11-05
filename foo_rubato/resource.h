@@ -32,6 +32,9 @@
 #define ID_CONFIG_WRITE_KEY             1039
 #define ID_CONFIG_WRITE_TUNING          1040
 #define ID_CONFIG_WRITE_RETUNE          1041
+#define ID_CONFIG_WRITE_FBPM            1042
+#define ID_CONFIG_WRITE_KEY_CANDIDATES  1044
+#define ID_CONFIG_WRITE_KEY_PAIR        1045
 
 // Next default values for new objects
 // 
@@ -39,7 +42,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        106
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1042
+#define _APS_NEXT_CONTROL_VALUE         1046
 #define _APS_NEXT_SYMED_VALUE           104
 #endif
 #endif

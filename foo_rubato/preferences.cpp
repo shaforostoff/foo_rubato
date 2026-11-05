@@ -15,16 +15,26 @@ cfg_bool bpm_config_auto_write_tag(guid_bpm_config_auto_write_tag, false);
 // alone.
 cfg_bool bpm_config_write_initial_bpm(guid_bpm_config_write_initial_bpm, true);
 cfg_bool bpm_config_write_bpm_algorithm(guid_bpm_config_write_bpm_algorithm, true);
+// FBPM: the tempo unrounded, whatever the precision above, for a reader that
+// wants the fraction the BPM tag was rounded away from. On by default because
+// it costs one field and the rounding is otherwise unrecoverable.
+cfg_bool bpm_config_write_fbpm(guid_bpm_config_write_fbpm, true);
 // Tuning and key. Detection is on by default: it roughly doubles the analysis,
 // which is still a small fraction of what decoding the track costs, and on
 // shellac transfers the tuning offset is the more useful of the two answers.
 //
-// The key is written by default too, but never as a bare fact - KEY is always
-// accompanied by KEYCANDIDATES and KEYCONFIDENCE, because the single answer is
-// right 79% of the time and a tag that does not say so is a tag that misleads.
-// Someone who wants only the tuning can turn the key off and keep it.
+// The key is written by default too - once, to the container's standard slot -
+// but never as a bare fact: it is always accompanied by KEYCONFIDENCE, because the single answer is right 79% of the
+// time and a tag that does not say so is a tag that misleads. KEYCANDIDATES,
+// the runners-up with their scores, is on by default and can be left out by
+// someone who wants fewer fields. Someone who wants only the tuning can turn
+// the key off and keep it.
 cfg_bool bpm_config_detect_key(guid_bpm_config_detect_key, true);
 cfg_bool bpm_config_write_key(guid_bpm_config_write_key, true);
+cfg_bool bpm_config_write_key_candidates(guid_bpm_config_write_key_candidates, true);
+// KEYS: the first two candidates, "C/Cm", for a reader that shows one short
+// field and has no use for the scores.
+cfg_bool bpm_config_write_key_pair(guid_bpm_config_write_key_pair, true);
 cfg_bool bpm_config_write_tuning(guid_bpm_config_write_tuning, true);
 cfg_bool bpm_config_write_retune(guid_bpm_config_write_retune, true);
 // Diagnostics

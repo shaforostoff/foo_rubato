@@ -41,6 +41,13 @@ bool file_info_filter_scale_bpm::apply_filter(metadb_handle_ptr p_track, t_files
 		if (rubato::parse_decimal(p_info.meta_get(BPM_INITIAL_TAG, 0), initial) && initial > 0)
 			p_info.meta_set(BPM_INITIAL_TAG, format_bpm(initial * m_scale));
 
+		// FBPM is the same tempo unrounded, so it takes the same factor. Scaled
+		// from its own value rather than the rounded BPM tag, or the fraction
+		// it is there to keep would be lost.
+		double fbpm = 0.0;
+		if (rubato::parse_decimal(p_info.meta_get(BPM_FBPM_TAG, 0), fbpm) && fbpm > 0)
+			p_info.meta_set(BPM_FBPM_TAG, format_bpm(fbpm * m_scale, BPM_PRECISION_2DP));
+
 		return true;
 	}
 	else

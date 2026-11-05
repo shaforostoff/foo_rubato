@@ -16,7 +16,10 @@ file_info_filter_bpm::file_info_filter_bpm(const metadb_handle_list & p_tracks,
 	, m_from_analysis(true)
 	, m_write_initial(bpm_config_write_initial_bpm)
 	, m_write_algorithm(bpm_config_write_bpm_algorithm)
+	, m_write_fbpm(bpm_config_write_fbpm)
 	, m_write_key(bpm_config_write_key)
+	, m_write_key_candidates(bpm_config_write_key_candidates)
+	, m_write_key_pair(bpm_config_write_key_pair)
 	, m_write_tuning(bpm_config_write_tuning)
 	, m_write_retune(bpm_config_write_retune)
 {
@@ -43,7 +46,10 @@ file_info_filter_bpm::file_info_filter_bpm(metadb_handle_ptr p_track, const char
 	, m_from_analysis(false)
 	, m_write_initial(bpm_config_write_initial_bpm)
 	, m_write_algorithm(bpm_config_write_bpm_algorithm)
+	, m_write_fbpm(bpm_config_write_fbpm)
 	, m_write_key(false)
+	, m_write_key_candidates(false)
+	, m_write_key_pair(false)
 	, m_write_tuning(false)
 	, m_write_retune(false)
 {
@@ -75,6 +81,13 @@ bool file_info_filter_bpm::apply_filter(metadb_handle_ptr p_track, t_filestats p
 	{
 		format_bpm bpm_value(r.bpm);
 		p_info.meta_set(m_bpm_tag, bpm_value);
+
+		// The same tempo unrounded, for a hand tap as much as for an analysis:
+		// it is the BPM tag's value, only without the rounding. Removed when
+		// switched off, like INITIALBPM, rather than left describing an
+		// earlier BPM.
+		const pfc::string8 fbpm = format_bpm(r.bpm, BPM_PRECISION_2DP).get_ptr();
+		set_or_remove(p_info, BPM_FBPM_TAG, fbpm, m_write_fbpm);
 
 		// Record what produced the number, or clear an attribution that is no
 		// longer true. Only a BPM the analysis stands behind is stamped: for one
@@ -114,23 +127,29 @@ bool file_info_filter_bpm::apply_filter(metadb_handle_ptr p_track, t_filestats p
 	                                            bpmcore::rhythm_name(bpmcore::rhythm_other)))
 		p_info.meta_set(BPM_GENRE_TAG, genre);
 
-	// The key, and - always beside it - how far to trust it. KEY on its own
-	// reads as a fact; it is right 79% of the time, and the two fields that
-	// say so travel with it or none of them is written.
+	// How far to trust the key, beside it. The key on its own reads as a
+	// fact; it is right 79% of the time, and KEYCONFIDENCE, which says so,
+	// travels with it. KEYCANDIDATES and KEYS have their own switches, and
+	// like every other field are removed rather than left stale when off.
 	const pfc::string8 key_name = bpm_format_key(r.key);
-	set_or_remove(p_info, BPM_KEY_TAG, key_name, m_write_key);
 	set_or_remove(p_info, BPM_KEY_CANDIDATES_TAG,
-	              bpm_format_key_candidates(r.key), m_write_key);
+	              bpm_format_key_candidates(r.key), m_write_key && m_write_key_candidates);
+	set_or_remove(p_info, BPM_KEY_PAIR_TAG,
+	              bpm_format_key_pair(r.key), m_write_key && m_write_key_pair);
 	set_or_remove(p_info, BPM_KEY_CONFIDENCE_TAG,
 	              bpm_format_key_confidence(r.key), m_write_key);
 	set_or_remove(p_info, BPM_MODE_BALANCE_TAG,
 	              bpm_format_mode_balance(r.key), m_write_key);
 
-	// The key again, in the container's standard slot - TKEY, "initialkey" or
-	// INITIALKEY - which is where most players and DJ tools look, and where
-	// KEY alone was reaching almost none of them.
+	// The key itself, written once, to the container's standard slot - TKEY,
+	// "initialkey" or INITIALKEY - which is where players and DJ tools look.
 	//
-	// That slot is shared: beaTunes keeps its own key there, with its own
+	// Earlier versions also wrote a plain KEY beside it. That is no longer
+	// written, and one already on the file is left exactly as it is: it may
+	// be another tagger's (Picard writes KEY in a Vorbis comment), and nothing
+	// on the file says whose it is.
+
+	// The slot is shared: beaTunes keeps its own key there, with its own
 	// KeyAlgorithm beside it. Writing ours over it is the point. Clearing it
 	// is not ours to do unless we put it there, so when this scan writes no
 	// key the slot and the attribution go only if the attribution names this

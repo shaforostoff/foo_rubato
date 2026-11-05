@@ -52,7 +52,10 @@ private:
 	//! way through writing a selection cannot apply to only half of it.
 	bool m_write_initial;
 	bool m_write_algorithm;
+	bool m_write_fbpm;
 	bool m_write_key;
+	bool m_write_key_candidates;
+	bool m_write_key_pair;
 	bool m_write_tuning;
 	bool m_write_retune;
 };
