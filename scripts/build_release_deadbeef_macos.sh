@@ -102,6 +102,12 @@
 #                           .dSYM beside it, where lldb finds it. Quit and
 #                           start DeaDBeeF again to load it.
 
+# Run as `sh script`, this is bash in POSIX mode (or another shell), where
+# the process substitutions below do not parse; start again in plain bash.
+if [ -z "${BASH_VERSION:-}" ] || shopt -qo posix 2>/dev/null; then
+    exec bash "$0" "$@"
+fi
+
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
