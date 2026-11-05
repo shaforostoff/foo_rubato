@@ -107,6 +107,12 @@ int main()
 	key.mode_switches = 7;
 	expect(format_key(key), "Dm", "key");
 	expect(format_key_candidates(key), "Dm:0.866 C:0.702 Gm:0.701", "key candidates");
+	expect(format_key_pair(key), "Dm/C", "key pair");
+	{
+		bpmcore::key_analysis one = key;
+		one.candidate_count = 1;
+		expect(format_key_pair(one), "Dm", "key pair, one candidate");
+	}
 	expect(format_key_confidence(key), "high", "key confidence");
 	expect(format_mode_balance(key), "40% major, 7 switches", "mode balance");
 	key.mode_switches = 1;

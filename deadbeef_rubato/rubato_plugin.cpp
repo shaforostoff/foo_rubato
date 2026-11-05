@@ -73,9 +73,10 @@ const char * const tag_bpm_algorithm    = "BpmAlgorithm";
 const char * const tag_key_algorithm    = "KeyAlgorithm";
 const char * const tag_tuning_algorithm = "TuningAlgorithm";
 const char * const tag_initial_bpm      = "INITIALBPM";
+const char * const tag_fbpm             = "FBPM";
 const char * const tag_genre            = "genre";
-const char * const tag_key              = "KEY";
 const char * const tag_key_candidates   = "KEYCANDIDATES";
+const char * const tag_key_pair         = "KEYS";
 const char * const tag_key_confidence   = "KEYCONFIDENCE";
 const char * const tag_mode_balance     = "MODEBALANCE";
 const char * const tag_tuning           = "TUNING";
@@ -113,8 +114,11 @@ const char settings_dialog_common[] =
 	"property \"Skip tracks that already have a BPM\" checkbox rubato.skip_tagged 0;\n"
 	"property \"Write INITIALBPM (the tempo the track opens at)\" checkbox rubato.write_initial_bpm 1;\n"
 	"property \"Write BpmAlgorithm and KeyAlgorithm\" checkbox rubato.write_algorithm 1;\n"
+	"property \"Write FBPM (the BPM to two decimals)\" checkbox rubato.write_fbpm 1;\n"
 	"property \"Detect tuning and key\" checkbox rubato.detect_key 1;\n"
-	"property \"Write KEY, KEYCANDIDATES and KEYCONFIDENCE\" checkbox rubato.write_key 1;\n"
+	"property \"Write the key and KEYCONFIDENCE\" checkbox rubato.write_key 1;\n"
+	"property \"Write KEYCANDIDATES (with the key)\" checkbox rubato.write_key_candidates 1;\n"
+	"property \"Write KEYS, the first two as C/Cm (with the key)\" checkbox rubato.write_key_pair 1;\n"
 	"property \"Write TUNING\" checkbox rubato.write_tuning 1;\n"
 	"property \"Write RETUNE\" checkbox rubato.write_retune 1;\n"
 	"property \"Log the details of each analysis\" checkbox rubato.diagnostics 0;\n";
@@ -272,23 +276,36 @@ void apply_analysis(DB_playItem_t * track, const std::string & path, const track
 		if (r.initial_bpm > 0) initial = rubato::format_bpm(r.initial_bpm, precision);
 		set_or_remove(track, tag_initial_bpm, initial, s.write_initial);
 
+		// The same tempo unrounded, whatever the precision: removed when
+		// switched off, like INITIALBPM, rather than left describing an
+		// earlier BPM.
+		set_or_remove(track, tag_fbpm, rubato::format_bpm(r.bpm, rubato::bpm_precision_2dp),
+		              s.write_fbpm);
+
 		const char * existing = deadbeef->pl_find_meta(track, tag_genre);
 		if (const char * genre = rubato::genre_to_write(existing, bpmcore::rhythm_name(a.rhythm),
 		                                                a.confidence))
 			deadbeef->pl_replace_meta(track, tag_genre, genre);
 	}
 
-	// The key, and always beside it how far to trust it: KEY alone reads as
-	// a fact, and it is right 79% of the time.
+	// How far to trust the key, beside it: the key alone reads as a fact, and
+	// it is right 79% of the time. KEYCANDIDATES and KEYS have their own
+	// switches, and like every other field are removed rather than left stale
+	// when off.
 	const std::string key_name = rubato::format_key(a.key);
-	set_or_remove(track, tag_key, key_name, s.write_key);
-	set_or_remove(track, tag_key_candidates, rubato::format_key_candidates(a.key), s.write_key);
+	set_or_remove(track, tag_key_candidates, rubato::format_key_candidates(a.key),
+	              s.write_key && s.write_key_candidates);
+	set_or_remove(track, tag_key_pair, rubato::format_key_pair(a.key),
+	              s.write_key && s.write_key_pair);
 	set_or_remove(track, tag_key_confidence, rubato::format_key_confidence(a.key), s.write_key);
 	set_or_remove(track, tag_mode_balance, rubato::format_mode_balance(a.key), s.write_key);
 
-	// The key again in the container's standard slot. That slot is shared
-	// with other taggers, so it is cleared only where our attribution says we
-	// were the ones who filled it.
+	// The key itself, written once, to the container's standard slot. Earlier
+	// versions also wrote a plain KEY; that is no longer written, and one
+	// already on the file is left alone: it may be another tagger's.
+	//
+	// The slot is shared with other taggers, so it is cleared only where our
+	// attribution says we were the ones who filled it.
 	const bool key_ours = s.write_key && !key_name.empty();
 	const char * const key_slot = rubato::initial_key_field(c);
 	const rubato::attribution key_was = rubato::attribution_of(
@@ -679,6 +696,9 @@ void run_hand_edit(const job & j, const std::string & path, const std::string & 
 		// The key and the tuning are still what was measured, and stay.
 		deadbeef->pl_delete_meta(j.track, tag_bpm_algorithm);
 		deadbeef->pl_delete_meta(j.track, tag_initial_bpm);
+		// The tap unrounded, as for an analysed BPM.
+		set_or_remove(j.track, tag_fbpm, rubato::format_bpm(b.value, rubato::bpm_precision_2dp),
+		              b.s.write_fbpm);
 		changed = true;
 	}
 	else
@@ -699,6 +719,13 @@ void run_hand_edit(const job & j, const std::string & path, const std::string & 
 			    && initial > 0)
 				deadbeef->pl_replace_meta(j.track, tag_initial_bpm,
 				                          rubato::format_bpm(initial * b.value, precision).c_str());
+			// FBPM takes the same factor, from its own value rather than the
+			// rounded BPM, or the fraction it is there to keep would be lost.
+			double fbpm = 0;
+			if (rubato::parse_decimal(deadbeef->pl_find_meta(j.track, tag_fbpm), fbpm) && fbpm > 0)
+				deadbeef->pl_replace_meta(j.track, tag_fbpm,
+				                          rubato::format_bpm(fbpm * b.value,
+				                                             rubato::bpm_precision_2dp).c_str());
 			changed = true;
 		}
 	}
@@ -1029,9 +1056,9 @@ const char plugin_description[] =
 	"and key.\n\n"
 	"Select tracks and use Rubato BPM Analyser in the context menu. Each track "
 	"gets a line in the log window (View > Log).\n\n"
-	"Written fields: BPM (TBPM in an mp3, tmpo in an m4a), INITIALBPM, "
-	"BpmAlgorithm, KEY, KEYCANDIDATES, KEYCONFIDENCE, MODEBALANCE, the "
-	"container's initial-key slot and KeyAlgorithm, TUNING and "
+	"Written fields: BPM (TBPM in an mp3, tmpo in an m4a), INITIALBPM, FBPM, "
+	"BpmAlgorithm, the key in the container's initial-key slot and "
+	"KeyAlgorithm, KEYCANDIDATES, KEYS, KEYCONFIDENCE, MODEBALANCE, TUNING and "
 	"TuningAlgorithm, RETUNE and RETUNECANDIDATES, and GENRE where it was "
 	"empty and the rhythm is at least 98% certain.";
 
@@ -1078,8 +1105,11 @@ rubato::settings rubato::read_settings()
 	if (tag[0] != '\0') s.bpm_tag = tag;
 	s.write_initial    = deadbeef->conf_get_int("rubato.write_initial_bpm", 1) != 0;
 	s.write_algorithm  = deadbeef->conf_get_int("rubato.write_algorithm", 1) != 0;
+	s.write_fbpm       = deadbeef->conf_get_int("rubato.write_fbpm", 1) != 0;
 	s.detect_key       = deadbeef->conf_get_int("rubato.detect_key", 1) != 0;
 	s.write_key        = deadbeef->conf_get_int("rubato.write_key", 1) != 0;
+	s.write_key_candidates = deadbeef->conf_get_int("rubato.write_key_candidates", 1) != 0;
+	s.write_key_pair   = deadbeef->conf_get_int("rubato.write_key_pair", 1) != 0;
 	s.write_tuning     = deadbeef->conf_get_int("rubato.write_tuning", 1) != 0;
 	s.write_retune     = deadbeef->conf_get_int("rubato.write_retune", 1) != 0;
 	s.skip_tagged      = deadbeef->conf_get_int("rubato.skip_tagged", 0) != 0;

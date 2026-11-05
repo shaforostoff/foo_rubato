@@ -177,7 +177,7 @@ Select tracks and open the **Rubato BPM Analyser** submenu of the playlist's con
   the windows, or with **Write tags without showing the results window** on,
   the tags are written as each track finishes.
 * **Double BPM** and **Halve BPM** correct the metrical level of a BPM that is
-  already in the file, scaling `INITIALBPM` with it and removing
+  already in the file, scaling `INITIALBPM` and `FBPM` with it and removing
   `BpmAlgorithm`, because the analysis no longer stands behind the number.
 * **Tap BPM of the playing track...**, with the windows, opens the tapping
   window.
@@ -233,9 +233,9 @@ Settings
 
 **Preferences > Plugins > Rubato BPM Analyzer > Configure** has the choices
 foo_rubato's preferences page has - BPM precision, the BPM field name,
-`INITIALBPM`, the `BpmAlgorithm`/`KeyAlgorithm` attributions, whether to
-measure tuning and key at all and which of `KEY`, `TUNING` and `RETUNE` to
-write, the diagnostic detail in the log, and with the windows, writing without
+`INITIALBPM`, `FBPM`, the `BpmAlgorithm`/`KeyAlgorithm` attributions,
+whether to measure tuning and key at all and which of the key, `KEYCANDIDATES`,
+`KEYS`, `TUNING` and `RETUNE` to write, the diagnostic detail in the log, and with the windows, writing without
 the results window and the two tapping settings - with the same defaults. In
 place of foo_rubato's question about overwriting tracks that already have a
 BPM, there is **Skip tracks that already have a BPM**, off by default.

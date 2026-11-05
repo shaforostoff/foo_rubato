@@ -82,9 +82,9 @@ int main()
 	analyse->callback2(analyse, DDB_ACTION_CTX_SELECTION);
 	rubato::wait_until_idle();
 
-	std::printf("flac: BPM %s, INITIALBPM %s, KEY %s, TUNING %s, RETUNE %s\n",
-	            get(flac, "BPM").c_str(), get(flac, "INITIALBPM").c_str(),
-	            get(flac, "KEY").c_str(), get(flac, "TUNING").c_str(), get(flac, "RETUNE").c_str());
+	std::printf("flac: BPM %s, FBPM %s, INITIALBPM %s, INITIALKEY %s, KEYS %s, TUNING %s, RETUNE %s\n",
+	            get(flac, "BPM").c_str(), get(flac, "FBPM").c_str(), get(flac, "INITIALBPM").c_str(),
+	            get(flac, "INITIALKEY").c_str(), get(flac, "KEYS").c_str(), get(flac, "TUNING").c_str(), get(flac, "RETUNE").c_str());
 	check(recorder::progress_shown == 0 && recorder::results.empty(), "no window asked for");
 	check(flac.writes == 1, "flac written once");
 	check(near_level(number(flac, "BPM"), 120), "flac BPM at a level of the 120 BPM click");
@@ -92,10 +92,13 @@ int main()
 	check(get(flac, "BpmAlgorithm") == std::string("Rubato;v=") + RUBATO_VERSION,
 	      "flac BpmAlgorithm stamped");
 	check(!get(flac, "INITIALBPM").empty(), "flac INITIALBPM written");
-	check(get(flac, "KEY").empty() || get(flac, "INITIALKEY") == get(flac, "KEY"),
-	      "flac key slot is INITIALKEY");
-	check(get(flac, "KEY").empty() || !get(flac, "KEYCONFIDENCE").empty(),
-	      "flac KEY never travels alone");
+	check(get(flac, "FBPM") == get(flac, "BPM"), "flac FBPM, the BPM to two decimals");
+	check(get(flac, "KEY").empty(), "flac no plain KEY: the key goes in INITIALKEY only");
+	check(get(flac, "INITIALKEY").empty() || !get(flac, "KEYCONFIDENCE").empty(),
+	      "flac key never travels alone");
+	check(get(flac, "INITIALKEY").empty()
+	      || get(flac, "KEYS").compare(0, get(flac, "INITIALKEY").size(), get(flac, "INITIALKEY")) == 0,
+	      "flac KEYS starts with the key");
 
 	std::printf("mp3: BEATS_PER_MINUTE %s, INITIAL_KEY %s, KeyAlgorithm %s\n",
 	            get(mp3, "BEATS_PER_MINUTE").c_str(), get(mp3, "INITIAL_KEY").c_str(),
@@ -103,9 +106,9 @@ int main()
 	check(mp3.writes == 1, "mp3 written once");
 	check(near_level(number(mp3, "BEATS_PER_MINUTE"), 100), "mp3 BPM in TBPM, from 16 bit audio");
 	check(get(mp3, "BPM").empty(), "mp3 TXXX:BPM removed beside TBPM");
-	const bool took_slot = get(mp3, "INITIAL_KEY") == get(mp3, "KEY")
+	const bool took_slot = !get(mp3, "KEYCONFIDENCE").empty()
 	                    && get(mp3, "KeyAlgorithm").compare(0, 7, "Rubato;") == 0;
-	const bool left_slot = get(mp3, "KEY").empty() && get(mp3, "INITIAL_KEY") == "F#m"
+	const bool left_slot = get(mp3, "KEYCONFIDENCE").empty() && get(mp3, "INITIAL_KEY") == "F#m"
 	                    && get(mp3, "KeyAlgorithm") == "beaTunes;v=5";
 	check(took_slot || left_slot, "mp3 TKEY and its attribution move together");
 
@@ -123,8 +126,9 @@ int main()
 	check(std::fabs(number(flac, "BPM") - 2 * before) < 0.011, "double doubles the BPM");
 	check(std::fabs(number(flac, "INITIALBPM") - 2 * initial_before) < 0.011,
 	      "double doubles INITIALBPM");
+	check(std::fabs(number(flac, "FBPM") - 2 * before) < 0.011, "double doubles FBPM");
 	check(get(flac, "BpmAlgorithm").empty(), "a doubled BPM loses its attribution");
-	check(get(flac, "KEY").empty() || !get(flac, "KeyAlgorithm").empty(),
+	check(get(flac, "INITIALKEY").empty() || !get(flac, "KeyAlgorithm").empty(),
 	      "the key keeps its attribution");
 	halver->callback2(halver, DDB_ACTION_CTX_SELECTION);
 	rubato::wait_until_idle();
@@ -246,7 +250,8 @@ int main()
 	      "the tapped BPM, in TBPM");
 	check(get(mp3, "BpmAlgorithm").empty() && get(mp3, "INITIALBPM").empty(),
 	      "a tap removes BpmAlgorithm and INITIALBPM");
-	check(get(mp3, "KEY").empty() || !get(mp3, "KEYCONFIDENCE").empty(), "a tap leaves the key");
+	check(get(mp3, "FBPM") == "96.40", "a tap writes FBPM");
+	check(get(mp3, "INITIAL_KEY").empty() || !get(mp3, "KEYCONFIDENCE").empty(), "a tap leaves the key");
 	check(rubato::playing_title() == "song.mp3", "the tapping window names what is playing");
 	playing = nullptr;
 

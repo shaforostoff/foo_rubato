@@ -39,8 +39,11 @@ struct settings
 	std::string bpm_tag = "BPM";
 	bool write_initial = true;
 	bool write_algorithm = true;
+	bool write_fbpm = true;
 	bool detect_key = true;
 	bool write_key = true;
+	bool write_key_candidates = true;
+	bool write_key_pair = true;
 	bool write_tuning = true;
 	bool write_retune = true;
 	bool skip_tagged = false;
