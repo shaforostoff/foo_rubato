@@ -10,10 +10,15 @@
 #include <vector>
 
 // The same test resample.cpp makes: SSE2 is the x64 baseline and the 32-bit
-// Windows build asks for it. Elsewhere the magnitude loop calls the C library.
+// Windows build asks for it, and arm64 has NEON. Elsewhere the magnitude loop
+// calls the C library.
 #if defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
 #include <emmintrin.h>
 #define BPMCORE_ODF_SSE2
+#elif defined(__aarch64__) && !defined(_MSC_VER)
+// arm64 always has NEON. Its logf is a call per bin like everyone else's.
+#include <arm_neon.h>
+#define BPMCORE_ODF_NEON
 #endif
 
 namespace bpmcore
@@ -39,7 +44,7 @@ namespace
 		return n > 1 ? 0.5 * (1.0 - std::cos(6.283185307179586 * i / (n - 1))) : 1.0;
 	}
 
-#if defined(BPMCORE_ODF_SSE2)
+#if defined(BPMCORE_ODF_SSE2) || defined(BPMCORE_ODF_NEON)
 	//! Cephes' logf, four at a time. Neither MSVC nor the CRT will vectorise
 	//! `logf`, and a call per bin was half the envelope's run time on x64 and
 	//! more than that on x86, whose CRT logf is three times slower again.
@@ -65,7 +70,54 @@ namespace
 	const float log_coefficients::ln2_lo = -2.12194440e-4f;
 	const float log_coefficients::ln2_hi = 0.693359375f;
 	const std::int32_t log_sqrt_half_bits = 0x3f3504f3;
+#endif
 
+#if defined(BPMCORE_ODF_NEON)
+	//! The same arithmetic in the same order as the SSE2 log_four below, so
+	//! arm64 and x86 take the same logarithms. Separate multiplies and adds,
+	//! not fused ones: intrinsics are not contracted, and a fused step would
+	//! round differently from the x86 build.
+	inline float32x4_t log_four(float32x4_t x)
+	{
+		typedef log_coefficients c;
+		const int32x4_t off = vdupq_n_s32(log_sqrt_half_bits);
+		int32x4_t ix = vsubq_s32(vreinterpretq_s32_f32(x), off);
+		const float32x4_t e = vcvtq_f32_s32(vshrq_n_s32(ix, 23));
+		ix = vaddq_s32(vandq_s32(ix, vdupq_n_s32(0x007fffff)), off);
+		const float32x4_t f = vsubq_f32(vreinterpretq_f32_s32(ix), vdupq_n_f32(1.0f));
+		const float32x4_t z = vmulq_f32(f, f);
+		float32x4_t y = vdupq_n_f32(c::p[0]);
+		for (int i = 1; i < 9; i++)
+			y = vaddq_f32(vmulq_f32(y, f), vdupq_n_f32(c::p[i]));
+		y = vmulq_f32(vmulq_f32(y, f), z);
+		y = vaddq_f32(y, vmulq_f32(e, vdupq_n_f32(c::ln2_lo)));
+		y = vaddq_f32(y, vmulq_f32(vdupq_n_f32(-0.5f), z));
+		return vaddq_f32(vaddq_f32(f, y), vmulq_f32(e, vdupq_n_f32(c::ln2_hi)));
+	}
+
+	inline void load_four(const float * p, float32x4_t & re, float32x4_t & im)
+	{
+		const float32x4x2_t v = vld2q_f32(p);
+		re = v.val[0];
+		im = v.val[1];
+	}
+
+	inline void load_four(const double * p, float32x4_t & re, float32x4_t & im)
+	{
+		const float64x2x2_t a = vld2q_f64(p), b = vld2q_f64(p + 4);
+		re = vcombine_f32(vcvt_f32_f64(a.val[0]), vcvt_f32_f64(b.val[0]));
+		im = vcombine_f32(vcvt_f32_f64(a.val[1]), vcvt_f32_f64(b.val[1]));
+	}
+
+	//! log(1 + scale * |bin|) for four bins.
+	inline float32x4_t compressed_four(float32x4_t re, float32x4_t im, float32x4_t s)
+	{
+		const float32x4_t mag = vsqrtq_f32(vaddq_f32(vmulq_f32(re, re), vmulq_f32(im, im)));
+		return log_four(vaddq_f32(vdupq_n_f32(1.0f), vmulq_f32(s, mag)));
+	}
+#endif
+
+#if defined(BPMCORE_ODF_SSE2)
 	inline __m128 log_four(__m128 x)
 	{
 		typedef log_coefficients c;
@@ -144,6 +196,27 @@ namespace
 			const float im = static_cast<float>(bins[k].i);
 			out[k] = log_one(1.0f + scale * std::sqrt(re * re + im * im));
 		}
+#elif defined(BPMCORE_ODF_NEON)
+		const float32x4_t s = vdupq_n_f32(scale);
+		for (; k + 4 <= n; k += 4)
+		{
+			float32x4_t re, im;
+			load_four(&bins[k].r, re, im);
+			vst1q_f32(out + k, compressed_four(re, im, s));
+		}
+		// The last few through the same lanes, so no bin's value depends on
+		// where the vectors ran out.
+		if (k < n)
+		{
+			float r4[4] = { 0, 0, 0, 0 }, i4[4] = { 0, 0, 0, 0 }, o4[4];
+			for (int j = 0; k + j < n; j++)
+			{
+				r4[j] = static_cast<float>(bins[k + j].r);
+				i4[j] = static_cast<float>(bins[k + j].i);
+			}
+			vst1q_f32(o4, compressed_four(vld1q_f32(r4), vld1q_f32(i4), s));
+			for (int j = 0; k + j < n; j++) out[k + j] = o4[j];
+		}
 #else
 		for (; k < n; k++)
 		{
@@ -215,8 +288,8 @@ namespace
 				// `sqrtf` are about a third cheaper than their double
 				// counterparts and this loop is the largest single cost in the
 				// analysis. Stored as float and widened for the difference
-				// below, which is then exact; on x86 the logarithm is
-				// compressed_magnitudes' own, four bins at a time.
+				// below, which is then exact; on x86 and arm64 the
+				// logarithm is compressed_magnitudes' own, four bins at a time.
 				//
 				// Not bit-exact, so it was measured rather than argued: over
 				// the whole 12,163-track collection not one changed rhythm,

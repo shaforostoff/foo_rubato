@@ -308,13 +308,25 @@ namespace
 			int * tmp = m_tmp.data();
 			for (int i = 0; i < count; i++) order[i] = i;
 
+			// All four bytes' counts in one read of the keys rather than one
+			// read per pass. The counts do not depend on the order, so they are
+			// the same counts each pass would have taken.
+			int hist[4][256] = { { 0 } };
+			for (int i = 0; i < count; i++)
+			{
+				const std::uint32_t k = key[i];
+				hist[0][k & 255]++;
+				hist[1][(k >> 8) & 255]++;
+				hist[2][(k >> 16) & 255]++;
+				hist[3][k >> 24]++;
+			}
+
 			// Least significant byte first. Each pass is stable, so values that
 			// tie stay in bin order. A pass whose byte is the same everywhere
 			// would leave the order as it was, and is skipped.
 			for (int shift = 0; shift < 32; shift += 8)
 			{
-				int at[256] = { 0 };
-				for (int i = 0; i < count; i++) at[(key[i] >> shift) & 255]++;
+				int * const at = hist[shift / 8];
 				if (at[(key[0] >> shift) & 255] == count) continue;
 				int sum = 0;
 				for (int b = 0; b < 256; b++) { const int c = at[b]; at[b] = sum; sum += c; }
@@ -607,10 +619,21 @@ namespace
 				const int begin = b * hop_block, end = std::min(begin + hop_block, blks);
 				for (int h = begin; h < end; h++)
 				{
+					// Four running sums, not one: a single one makes every add
+					// wait on the one before, and that chain was most of the
+					// stage's serial time. Reassociated like the fours above.
 					const float * src = mono + static_cast<std::size_t>(h) * hop;
-					double sum = 0;
-					for (int i = 0; i < hop; i++) sum += static_cast<double>(src[i]) * src[i];
-					hop_sum[h] = sum;
+					double s0 = 0, s1 = 0, s2 = 0, s3 = 0;
+					int i = 0;
+					for (; i + 4 <= hop; i += 4)
+					{
+						s0 += static_cast<double>(src[i]) * src[i];
+						s1 += static_cast<double>(src[i + 1]) * src[i + 1];
+						s2 += static_cast<double>(src[i + 2]) * src[i + 2];
+						s3 += static_cast<double>(src[i + 3]) * src[i + 3];
+					}
+					for (; i < hop; i++) s0 += static_cast<double>(src[i]) * src[i];
+					hop_sum[h] = (s0 + s1) + (s2 + s3);
 				}
 			});
 			for (int f = 0; f < frames; f++)
