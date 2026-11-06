@@ -4,6 +4,30 @@ Rubato BPM Analyzer for foobar2000
 Change Log
 ----------
 
+### Version 0.2.3
+
+* **KEYS: the keys a song is held in longest.** Each 12 s window now also
+  picks the best of all 24 keys, and the two that win the most windows are
+  written as `KEYS` (for example `Bm/D`), the second only when it holds at
+  least 15% of the windows. Below the high-confidence band, `KEY` takes the
+  key held longest rather than the whole-track profile's answer, and
+  `MODEBALANCE` is measured against the reported key's own relative pair.
+
+* **FBPM and one key field.** `FBPM` holds the BPM to two decimals whatever
+  the precision setting, taps included; Double and Halve scale it from its
+  own value. `FBPM`, `KEYCANDIDATES` and `KEYS` each have a setting, on by
+  default. The key goes to one field per container (`TKEY` in mp3,
+  `initialkey` in m4a, `INITIALKEY` elsewhere), and a `KEY` already on a
+  file is left alone. The same in the DeaDBeeF plugin.
+
+* **Faster analysis.** The resampler, the key stage's median sort and the
+  envelope's logarithm were reworked, with NEON versions on arm64. x86
+  results are bit-identical to 0.2.2; on arm64 the key fields are identical
+  and tempo fields move in the eighth significant digit.
+
+* **macOS:** the foobar2000 update source is declared in Info.plist, and the
+  release script is fixed.
+
 ### Version 0.2.2
 
 * **A track with no tempo leaves its BPM alone.** A file too short, silent or

@@ -24,7 +24,7 @@ if(POLICY CMP0091)
 endif()
 
 project(foo_rubato
-        VERSION 0.2.2
+        VERSION 0.2.3
         DESCRIPTION "Rubato BPM Analyzer for foobar2000"
         LANGUAGES C CXX)   # kiss_fft and pffft are C
 
