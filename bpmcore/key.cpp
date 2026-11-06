@@ -3,6 +3,7 @@
 #include "real_fft.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -149,6 +150,9 @@ const double key_frame_gate = 0.4;
 // three-second hop a 32-bar section gets several windows to itself.
 const double key_mode_window_seconds = 12.0;
 const double key_mode_hop_seconds = 3.0;
+// The least share of those windows a second key has to win to be reported
+// beside the first. At 15% about one labelled side in four reports one key.
+const double key_time_second_share = 0.15;
 
 const double key_tuning_min_r = 0.25;
 const double key_wrap_warn_cents = 45.0;
@@ -1015,7 +1019,12 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 	const std::size_t mode_hop = static_cast<std::size_t>(key_mode_hop_seconds * sample_rate);
 	if (count >= win && mode_hop > 0)
 	{
-		std::vector<bool> major;
+		// Each window's chroma, kept so the mode balance can be measured again
+		// if the reported key moves to another signature below.
+		std::vector<std::array<double, 12> > windows;
+		// Which of all 24 keys fits each window best, counted. See
+		// key_analysis::time_keys.
+		int won[24] = { 0 };
 		for (std::size_t s = 0; s + win <= count; s += mode_hop)
 		{
 			// Frames lying wholly inside the window, which is what slicing the
@@ -1038,21 +1047,44 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 			for (int i = 0; i < 12; i++) cs += c[i];
 			if (cs <= 0) continue;
 			for (int i = 0; i < 12; i++) c[i] /= cs;
-			major.push_back(correlate_profile(c, key_profile_major, maj_root) >
-			                correlate_profile(c, key_profile_minor, min_root));
+			std::array<double, 12> kept;
+			for (int i = 0; i < 12; i++) kept[i] = c[i];
+			windows.push_back(kept);
+
+			int top = 0;
+			double top_score = -2;
+			for (int j = 0; j < 24; j++)
+			{
+				const double sc = correlate_profile(
+					c, j >= 12 ? key_profile_minor : key_profile_major, j % 12);
+				if (sc > top_score) { top_score = sc; top = j; }
+			}
+			won[top]++;
 		}
 
-		if (major.size() >= 4)
+		// Share of windows where the major of a relative pair beats its minor,
+		// and how often that changes hands - MODEBALANCE, for one signature.
+		auto measure_mode = [&](int pair_major_root)
 		{
+			const int pair_minor_root = (pair_major_root + 9) % 12;
 			int n_major = 0, switches = 0;
-			for (std::size_t i = 0; i < major.size(); i++)
+			bool last = false;
+			for (std::size_t i = 0; i < windows.size(); i++)
 			{
-				if (major[i]) n_major++;
-				if (i > 0 && major[i] != major[i - 1]) switches++;
+				const bool m = correlate_profile(windows[i].data(), key_profile_major, pair_major_root) >
+				               correlate_profile(windows[i].data(), key_profile_minor, pair_minor_root);
+				if (m) n_major++;
+				if (i > 0 && m != last) switches++;
+				last = m;
 			}
-			out.mode_windows = static_cast<int>(major.size());
+			out.mode_windows = static_cast<int>(windows.size());
 			out.mode_switches = switches;
-			out.major_fraction = static_cast<double>(n_major) / major.size();
+			out.major_fraction = static_cast<double>(n_major) / windows.size();
+		};
+
+		if (windows.size() >= 4)
+		{
+			measure_mode(maj_root);
 			// The natural half, and left there: the result is flat over
 			// thresholds from 0.30 to 0.50, so there is nothing to tune, and a
 			// threshold fitted on 60 tracks would be a threshold fitted on 60
@@ -1063,6 +1095,49 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 			out.best.score = is_major
 				? correlate_profile(full, key_profile_major, maj_root)
 				: correlate_profile(full, key_profile_minor, min_root);
+
+			// The keys held longest. A tie goes to the key the whole-track
+			// profile fits better, so the order never depends on how the 24
+			// happen to be numbered.
+			double whole[24];
+			int order[24];
+			for (int j = 0; j < 24; j++)
+			{
+				whole[j] = correlate_profile(full, j >= 12 ? key_profile_minor : key_profile_major, j % 12);
+				order[j] = j;
+			}
+			std::sort(order, order + 24, [&](int a, int b)
+			          { return won[a] != won[b] ? won[a] > won[b] : whole[a] > whole[b]; });
+			const double n = static_cast<double>(windows.size());
+			for (int i = 0; i < 2; i++)
+			{
+				const int j = order[i];
+				if (won[j] == 0) break;
+				if (i == 1 && won[j] / n < key_time_second_share) break;
+				out.time_keys[i].root = j % 12;
+				out.time_keys[i].minor = j >= 12;
+				out.time_keys[i].score = whole[j];
+				out.time_shares[i] = won[j] / n;
+				out.time_key_count = i + 1;
+			}
+
+			// Below the high band the whole-track profile is a near tie, and
+			// the key held longest is the better tiebreak: on the 58 labelled
+			// Troilo sides this took exact keys from 46 to 47. Low-band answers
+			// flip with small changes to which windows count, so that is within
+			// noise; it was chosen on Nick's call, and because a track he hears
+			// as B minor with D major sections (Fresedo, "Si no me engana el
+			// corazon") profiled as A.
+			if (out.margin < key_margin_high && out.time_key_count > 0)
+			{
+				out.best = out.time_keys[0];
+				// The mode balance describes the reported key's own relative
+				// pair, so a key moved to another signature is measured again:
+				// otherwise a track reported as Bm would say "69% major",
+				// meaning A over F#m.
+				const int new_maj = out.best.minor ? (out.best.root + 3) % 12 : out.best.root;
+				if (new_maj != maj_root) measure_mode(new_maj);
+			}
 		}
 	}
 

@@ -935,6 +935,14 @@ namespace
 			std::printf("           mode over time: %.0f%% of %d windows major, "
 			            "%d switch(es)\n",
 			            100.0 * k.major_fraction, k.mode_windows, k.mode_switches);
+		if (k.time_key_count > 0)
+		{
+			std::printf("           held longest:  ");
+			for (int i = 0; i < k.time_key_count; i++)
+				std::printf("%s %.0f%%   ", bpmcore::key_name(k.time_keys[i].root, k.time_keys[i].minor),
+				            100.0 * k.time_shares[i]);
+			std::printf("\n");
+		}
 
 		bpmcore::retune_option opts[bpmcore::key_candidate_count];
 		const int n = bpmcore::suggest_retune(k.tuning_cents, year, opts,

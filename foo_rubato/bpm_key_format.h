@@ -73,18 +73,23 @@ inline pfc::string8 bpm_format_key_candidates(const bpmcore::key_analysis & key)
 	return out;
 }
 
-//! The first two candidates, slash-separated - "C/Cm" - for a player that
-//! shows one short field. The first alone when it is the only candidate.
+//! The two keys the song spends longest in, slash-separated, longest first -
+//! "Cm/C" - for a player that shows one short field.
+//!
+//! One key when the second holds too little of the track to count, and the
+//! reported key alone when the track was too short to follow over time. The
+//! first is not always KEY: with a confident whole-track profile KEY keeps the
+//! profile's answer, while this says where the song actually sat.
 inline pfc::string8 bpm_format_key_pair(const bpmcore::key_analysis & key)
 {
 	pfc::string8 out;
 	if (!key.ok) return out;
-	int taken = 0;
-	for (int i = 0; i < key.candidate_count && taken < 2; i++)
+	if (key.time_key_count <= 0) return bpm_format_key(key);
+	for (int i = 0; i < key.time_key_count && i < 2; i++)
 	{
-		if (key.candidates[i].root < 0) continue;
-		if (taken++ > 0) out << "/";
-		out << bpmcore::key_name(key.candidates[i].root, key.candidates[i].minor);
+		if (key.time_keys[i].root < 0) continue;
+		if (!out.is_empty()) out << "/";
+		out << bpmcore::key_name(key.time_keys[i].root, key.time_keys[i].minor);
 	}
 	return out;
 }

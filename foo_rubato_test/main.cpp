@@ -83,6 +83,10 @@ namespace
 		k.major_fraction = 0.40;
 		k.mode_switches = 7;
 		k.mode_windows = 55;
+		k.time_keys[0].root = 2; k.time_keys[0].minor = true;  k.time_keys[0].score = 0.866;   // Dm
+		k.time_keys[1].root = 5; k.time_keys[1].minor = false; k.time_keys[1].score = 0.650;   // F
+		k.time_shares[0] = 0.62; k.time_shares[1] = 0.27;
+		k.time_key_count = 2;
 		return k;
 	}
 }
@@ -201,11 +205,14 @@ int main()
 	// --- the tag schema, exactly as key-detection-feature-plan.md sets it out
 	check_str(bpm_format_key(k), "Dm", "KEY");
 	check_str(bpm_format_key_candidates(k), "Dm:0.866 C:0.702 Gm:0.701", "KEYCANDIDATES");
-	check_str(bpm_format_key_pair(k), "Dm/C", "KEYS");
+	check_str(bpm_format_key_pair(k), "Dm/F", "KEYS, the two keys held longest");
 	{
 		bpmcore::key_analysis one = k;
-		one.candidate_count = 1;
-		check_str(bpm_format_key_pair(one), "Dm", "KEYS, one candidate");
+		one.time_key_count = 1;
+		check_str(bpm_format_key_pair(one), "Dm", "KEYS, second key too brief");
+		bpmcore::key_analysis short_track = k;
+		short_track.time_key_count = 0;
+		check_str(bpm_format_key_pair(short_track), "Dm", "KEYS, too short to follow");
 	}
 	check_str(bpm_format_key_confidence(k), "high", "KEYCONFIDENCE");
 	check_str(bpm_format_mode_balance(k), "40% major, 7 switches", "MODEBALANCE");

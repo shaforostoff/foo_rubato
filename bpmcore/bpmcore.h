@@ -104,7 +104,8 @@ struct key_analysis
 	//! The key to report. Not necessarily `candidates[0]`: where the mode was
 	//! tracked it is the profile's key signature with the mode that actually
 	//! held for most of the track, which is the better answer and sometimes a
-	//! different one.
+	//! different one. And where the profile's margin is below the high band,
+	//! it is `time_keys[0]` - the key held longest - instead.
 	key_candidate best;
 
 	//! The profile's own ranking, best first, with the scores it gave them.
@@ -116,8 +117,8 @@ struct key_analysis
 	double margin = 0;
 	int confidence = key_confidence_low;
 
-	//! Share of the track where the major of the relative pair was in charge,
-	//! and how many times it changed hands. -1 when the track was too short to
+	//! Share of the track where the major of `best`'s relative pair was in
+	//! charge, and how many times it changed hands. -1 when the track was too short to
 	//! track, which needs about 21 seconds.
 	//!
 	//! This is not a key change: a tango with a minor A section and a major B
@@ -126,6 +127,21 @@ struct key_analysis
 	double major_fraction = -1;
 	int mode_switches = -1;
 	int mode_windows = 0;
+
+	//! The keys held longest, by the share of those same windows each one
+	//! wins out of all 24, longest first. The second is set only when it
+	//! holds at least `key_time_second_share` of the windows; a track that
+	//! barely visits another key reports one. `time_key_count` is 0 when the
+	//! track was too short to track.
+	//!
+	//! Not a measurement of modulation: a stretch dwelling on the dominant
+	//! can win windows too. On the 58 labelled Troilo sides the true key is
+	//! among these two 91% of the time, against 93% for the first two
+	//! `candidates`, so they are a description of where the song sits rather
+	//! than a better answer.
+	key_candidate time_keys[2];
+	double time_shares[2] = { 0, 0 };
+	int time_key_count = 0;
 
 	//! Weight in each pitch class, summing to 1, after the tuning offset has
 	//! been taken out. Kept for diagnostics; nothing downstream needs it.
