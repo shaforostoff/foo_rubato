@@ -133,6 +133,11 @@ struct key_analysis
 	//! This is not a key change: a tango with a minor A section and a major B
 	//! section keeps one key signature throughout. It is which of the
 	//! signature's two tonics the music is sitting on.
+	//!
+	//! Except when the two `time_keys` are `best` and its parallel (Cm and
+	//! C): then the pair measured is those two, since the relative major
+	//! would never win and the balance would read 0% for a song that spends
+	//! a fifth of its length in the major.
 	double major_fraction = -1;
 	int mode_switches = -1;
 	int mode_windows = 0;

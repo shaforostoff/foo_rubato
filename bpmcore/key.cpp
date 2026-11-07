@@ -1095,11 +1095,11 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 			won[top]++;
 		}
 
-		// Share of windows where the major of a relative pair beats its minor,
-		// and how often that changes hands - MODEBALANCE, for one signature.
-		auto measure_mode = [&](int pair_major_root)
+		// Share of windows where the major of a pair beats its minor, and how
+		// often that changes hands - MODEBALANCE. The pair is the signature's
+		// relative major and minor unless told otherwise.
+		auto measure_mode = [&](int pair_major_root, int pair_minor_root)
 		{
-			const int pair_minor_root = (pair_major_root + 9) % 12;
 			int n_major = 0, switches = 0;
 			bool last = false;
 			for (std::size_t i = 0; i < windows.size(); i++)
@@ -1117,7 +1117,7 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 
 		if (windows.size() >= 4)
 		{
-			measure_mode(maj_root);
+			measure_mode(maj_root, min_root);
 			// The natural half, and left there: the result is flat over
 			// thresholds from 0.30 to 0.50, so there is nothing to tune, and a
 			// threshold fitted on 60 tracks would be a threshold fitted on 60
@@ -1169,8 +1169,21 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 				// otherwise a track reported as Bm would say "69% major",
 				// meaning A over F#m.
 				const int new_maj = out.best.minor ? (out.best.root + 3) % 12 : out.best.root;
-				if (new_maj != maj_root) measure_mode(new_maj);
+				if (new_maj != maj_root) measure_mode(new_maj, (new_maj + 9) % 12);
 			}
+
+			// A minor tango whose trio goes to the major on the same tonic -
+			// El amanecer, Cm and C - changes signature, so its relative pair
+			// reads "0% major": Eb never wins a window, and C is not in the
+			// comparison. When the two keys held longest are the reported key
+			// and its parallel, the balance is measured between those two
+			// instead, which is the movement the song makes. The mode of the
+			// reported key was settled above and is not revisited here.
+			if (out.time_key_count == 2 &&
+			    out.time_keys[0].root == out.time_keys[1].root &&
+			    out.time_keys[0].minor != out.time_keys[1].minor &&
+			    out.best.root == out.time_keys[0].root)
+				measure_mode(out.best.root, out.best.root);
 		}
 	}
 

@@ -11,7 +11,9 @@ Change Log
   written as `KEYS` (for example `Bm/D`), the second only when it holds at
   least 15% of the windows. Below the high-confidence band, `KEY` takes the
   key held longest rather than the whole-track profile's answer, and
-  `MODEBALANCE` is measured against the reported key's own relative pair.
+  `MODEBALANCE` is measured against the reported key's own relative pair,
+  or against its parallel when `KEYS` is the two (`Cm/C`), which had read
+  `0% major` before.
   A key and its parallel minor share a letter (`Ab/Abm`, `C#/C#m`, not
   `Ab/G#m`), and `KEY` is spelt the way `KEYS` spells it. The same in the
   DeaDBeeF plugin.

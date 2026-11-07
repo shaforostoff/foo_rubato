@@ -415,7 +415,10 @@ component wrote it.
 
 `MODEBALANCE` is which of the relative pair was in charge and how often it
 changed hands. That is not a key change: a tango with a minor A section and a
-major B section keeps one key signature throughout.
+major B section keeps one key signature throughout. When `KEYS` is the key and
+its parallel (`Cm/C`, a minor tango with a trio in the major on the same
+tonic), the balance is between those two instead, since the relative major
+would never be in charge.
 
 Two more fields record attribution rather than a measurement:
 
