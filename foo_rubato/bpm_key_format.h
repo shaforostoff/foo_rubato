@@ -124,12 +124,31 @@ inline pfc::string8 bpm_format_key_confidence(const bpmcore::key_analysis & key)
 	return out;
 }
 
+//! Whether MODEBALANCE would read "0% major" or "100% major", which says the
+//! mode never moved and nothing about where the song went instead. Not when
+//! the dominant and subdominant would both read 0% too: then the song went
+//! nowhere, and "0% major" says more than "0% dominant (0% subdominant)".
+inline bool bpm_mode_never_moves(const bpmcore::key_analysis & key)
+{
+	return key.dominant_share >= 0 &&
+	       (key.major_fraction < 0.005 || key.major_fraction >= 0.995) &&
+	       (key.dominant_share >= 0.005 || key.subdominant_share >= 0.005);
+}
+
 //! "40% major, 7 switches" - which of the relative pair held the track, and
-//! how often it changed hands. Blank on a track too short to track.
+//! how often it changed hands. Where that would be 0% or 100% major,
+//! "18% dominant (9% subdominant)" instead: the share of the track spent on
+//! the key's dominant and subdominant. Blank on a track too short to track.
 inline pfc::string8 bpm_format_mode_balance(const bpmcore::key_analysis & key)
 {
 	pfc::string8 out;
 	if (!key.ok || key.major_fraction < 0) return out;
+	if (bpm_mode_never_moves(key))
+	{
+		out << pfc::format_float(100.0 * key.dominant_share, 0, 0) << "% dominant ("
+		    << pfc::format_float(100.0 * key.subdominant_share, 0, 0) << "% subdominant)";
+		return out;
+	}
 	out << pfc::format_float(100.0 * key.major_fraction, 0, 0) << "% major, "
 	    << key.mode_switches << (key.mode_switches == 1 ? " switch" : " switches");
 	return out;

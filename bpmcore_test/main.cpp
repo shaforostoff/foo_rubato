@@ -1014,7 +1014,8 @@ namespace
 		             static_cast<int>(items.size()), BPMCORE_TEST_SCALAR, ffmpeg.c_str());
 
 		std::printf("#path\tok\ttuning\tr\tkey\tcand1\tscore1\tcand2\tscore2\tcand3\tscore3"
-		            "\tmargin\tconfidence\tmajor_frac\tswitches\twindows\tyear\tretune\n");
+		            "\tmargin\tconfidence\tmajor_frac\tswitches\twindows\tyear\tretune"
+		            "\tkeys\tshare1\tshare2\tdominant\tsubdominant\n");
 
 		int failed = 0;
 		std::vector<float> mono;
@@ -1056,10 +1057,20 @@ namespace
 				                ? bpmcore::key_name(k.candidates[j].root, k.candidates[j].minor)
 				                : "-",
 				            j < k.candidate_count ? k.candidates[j].score : 0.0);
-			std::printf("\t%.4f\t%s\t%.3f\t%d\t%d\t%d\t%s\n", k.margin,
+			std::printf("\t%.4f\t%s\t%.3f\t%d\t%d\t%d\t%s", k.margin,
 			            bpmcore::key_confidence_name(k.confidence),
 			            k.major_fraction, k.mode_switches, k.mode_windows,
 			            items[i].second, retune.c_str());
+			// The keys held longest, which KEYS is written from.
+			std::string keys;
+			for (int j = 0; j < k.time_key_count; j++)
+			{
+				if (j) keys += "/";
+				keys += bpmcore::key_name(k.time_keys[j].root, k.time_keys[j].minor);
+			}
+			std::printf("\t%s\t%.3f\t%.3f\t%.3f\t%.3f\n", keys.empty() ? "-" : keys.c_str(),
+			            k.time_shares[0], k.time_shares[1],
+			            k.dominant_share, k.subdominant_share);
 			std::fflush(stdout);
 			if ((i + 1) % 25 == 0 || i + 1 == items.size())
 				std::fprintf(stderr, "\r%d/%d", static_cast<int>(i + 1),

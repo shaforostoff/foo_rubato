@@ -133,6 +133,19 @@ int main()
 	expect(format_mode_balance(key), "40% major, 7 switches", "mode balance");
 	key.mode_switches = 1;
 	expect(format_mode_balance(key), "40% major, 1 switch", "one switch");
+	{
+		bpmcore::key_analysis still = key;
+		still.major_fraction = 0; still.mode_switches = 0;
+		still.dominant_share = 0.18; still.subdominant_share = 0.09;
+		expect(format_mode_balance(still), "18% dominant (9% subdominant)", "0% major");
+		still.major_fraction = 1;
+		expect(format_mode_balance(still), "18% dominant (9% subdominant)", "100% major");
+		still.dominant_share = 0; still.subdominant_share = 0.004;
+		expect(format_mode_balance(still), "100% major, 0 switches", "both shares 0%");
+		still.dominant_share = 0.18; still.subdominant_share = 0.09;
+		still.major_fraction = 0.006; still.mode_switches = 1;
+		expect(format_mode_balance(still), "1% major, 1 switch", "1% major is a balance");
+	}
 	expect(format_tuning(key), "-19.8", "tuning");
 
 	expect(format_retune(key, 0), "", "no retune without a year");

@@ -1058,6 +1058,8 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 		// Which of all 24 keys fits each window best, counted. See
 		// key_analysis::time_keys.
 		int won[24] = { 0 };
+		// And which one it was, window by window, for the parallel balance.
+		std::vector<int> window_top;
 		for (std::size_t s = 0; s + win <= count; s += mode_hop)
 		{
 			// Frames lying wholly inside the window, which is what slicing the
@@ -1093,6 +1095,7 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 				if (sc > top_score) { top_score = sc; top = j; }
 			}
 			won[top]++;
+			window_top.push_back(top);
 		}
 
 		// Share of windows where the major of a pair beats its minor, and how
@@ -1179,11 +1182,49 @@ bool compute_key(const float * mono, std::size_t count, unsigned sample_rate,
 			// and its parallel, the balance is measured between those two
 			// instead, which is the movement the song makes. The mode of the
 			// reported key was settled above and is not revisited here.
+			//
+			// Only the windows one of the two won outright count. Scoring
+			// every window on the two profiles let the windows that went to
+			// a third key (the relative major, the dominant) lean the balance
+			// against the order of KEYS: across 2488 TangoTunes files, 82 of
+			// 693 parallel pairs read "Am/A" beside "64% major". Counted this
+			// way the balance is the pair's own share and cannot disagree.
 			if (out.time_key_count == 2 &&
 			    out.time_keys[0].root == out.time_keys[1].root &&
 			    out.time_keys[0].minor != out.time_keys[1].minor &&
 			    out.best.root == out.time_keys[0].root)
-				measure_mode(out.best.root, out.best.root);
+			{
+				const int j_major = out.best.root;
+				const int j_minor = 12 + out.best.root;
+				int n_pair = 0, n_major = 0, switches = 0;
+				bool last = false;
+				for (int top : window_top)
+				{
+					if (top != j_major && top != j_minor) continue;
+					const bool m = top == j_major;
+					if (m) n_major++;
+					if (n_pair > 0 && m != last) switches++;
+					last = m;
+					n_pair++;
+				}
+				out.mode_windows = n_pair;
+				out.mode_switches = switches;
+				out.major_fraction = static_cast<double>(n_major) / n_pair;
+			}
+
+			// Where a song that never changes mode goes instead: the share of
+			// windows won by a key on the reported key's dominant or
+			// subdominant, either mode. A minor tango whose B section sits on
+			// the dominant (Fm/Cm) reads "0% major" and says nothing more.
+			int n_dom = 0, n_sub = 0;
+			for (int top : window_top)
+			{
+				const int interval = (top % 12 - out.best.root + 12) % 12;
+				if (interval == 7) n_dom++;
+				else if (interval == 5) n_sub++;
+			}
+			out.dominant_share = static_cast<double>(n_dom) / window_top.size();
+			out.subdominant_share = static_cast<double>(n_sub) / window_top.size();
 		}
 	}
 

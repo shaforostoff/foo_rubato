@@ -137,10 +137,19 @@ struct key_analysis
 	//! Except when the two `time_keys` are `best` and its parallel (Cm and
 	//! C): then the pair measured is those two, since the relative major
 	//! would never win and the balance would read 0% for a song that spends
-	//! a fifth of its length in the major.
+	//! a fifth of its length in the major. Only the windows one of the two
+	//! won count, so `mode_windows` is fewer and the balance always agrees
+	//! with the order of `time_keys`.
 	double major_fraction = -1;
 	int mode_switches = -1;
 	int mode_windows = 0;
+
+	//! Share of all the tracked windows won by a key on `best`'s dominant
+	//! (a fifth up) or its subdominant (a fourth up), major or minor. -1 when
+	//! the track was too short to track. What MODEBALANCE reports instead of
+	//! the balance when the mode never changes hands.
+	double dominant_share = -1;
+	double subdominant_share = -1;
 
 	//! The keys held longest, by the share of those same windows each one
 	//! wins out of all 24, longest first. The second is set only when it

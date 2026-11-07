@@ -352,6 +352,35 @@ int main()
 	one_switch.mode_switches = 1;
 	check_str(bpm_format_mode_balance(one_switch), "40% major, 1 switch", "one switch");
 
+	// --- a mode that never moves reports the dominant and subdominant
+	bpmcore::key_analysis still = sample();
+	still.major_fraction = 0;
+	still.mode_switches = 0;
+	still.dominant_share = 0.18;
+	still.subdominant_share = 0.09;
+	check_str(bpm_format_mode_balance(still), "18% dominant (9% subdominant)", "0% major");
+	still.major_fraction = 1;
+	check_str(bpm_format_mode_balance(still), "18% dominant (9% subdominant)", "100% major");
+	still.major_fraction = 0.996;
+	check_str(bpm_format_mode_balance(still), "18% dominant (9% subdominant)",
+	          "a balance that rounds to 100%");
+	still.major_fraction = 0.006;
+	still.mode_switches = 1;
+	check_str(bpm_format_mode_balance(still), "1% major, 1 switch", "1% major is a balance");
+	still.major_fraction = 1;
+	still.mode_switches = 0;
+	still.dominant_share = 0.004;
+	still.subdominant_share = 0;
+	check_str(bpm_format_mode_balance(still), "100% major, 0 switches",
+	          "both shares 0%: the balance as it was");
+	still.subdominant_share = 0.01;
+	check_str(bpm_format_mode_balance(still), "0% dominant (1% subdominant)",
+	          "one share above 0%");
+	still.major_fraction = 0;
+	still.dominant_share = -1;
+	check_str(bpm_format_mode_balance(still), "0% major, 0 switches",
+	          "no dominant share: the balance as it was");
+
 	// --- keys are spelt by their signature, not by whatever is a semitone up
 	bpmcore::key_analysis flat = sample();
 	flat.best.root = 10; flat.best.minor = false;

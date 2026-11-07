@@ -184,11 +184,23 @@ inline std::string format_key_confidence(const bpmcore::key_analysis & key)
 	return std::string();
 }
 
-//! "40% major, 7 switches"
+//! "40% major, 7 switches", or "18% dominant (9% subdominant)" where the
+//! balance would be 0% or 100% major and so say nothing about where the song
+//! went. The same as foobar2000's bpm_format_mode_balance.
 inline std::string format_mode_balance(const bpmcore::key_analysis & key)
 {
 	std::string out;
 	if (!key.ok || key.major_fraction < 0) return out;
+	if (key.dominant_share >= 0 &&
+	    (key.major_fraction < 0.005 || key.major_fraction >= 0.995) &&
+	    (key.dominant_share >= 0.005 || key.subdominant_share >= 0.005))
+	{
+		out += format_fixed(100.0 * key.dominant_share, 0);
+		out += "% dominant (";
+		out += format_fixed(100.0 * key.subdominant_share, 0);
+		out += "% subdominant)";
+		return out;
+	}
 	out += format_fixed(100.0 * key.major_fraction, 0);
 	out += "% major, ";
 	out += std::to_string(key.mode_switches);

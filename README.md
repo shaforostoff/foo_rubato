@@ -417,8 +417,12 @@ component wrote it.
 changed hands. That is not a key change: a tango with a minor A section and a
 major B section keeps one key signature throughout. When `KEYS` is the key and
 its parallel (`Cm/C`, a minor tango with a trio in the major on the same
-tonic), the balance is between those two instead, since the relative major
-would never be in charge.
+tonic), the balance is between those two instead, counted over the stretches
+each of them holds, since the relative major would never be in charge. Where
+the balance would be `0% major` or `100% major`, the mode never moved and the
+field says where the song went instead: `18% dominant (9% subdominant)`, the
+share of the track spent in a key on the dominant and on the subdominant. A
+song that visits neither keeps `0% major`.
 
 Two more fields record attribution rather than a measurement:
 

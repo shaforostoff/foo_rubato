@@ -13,7 +13,11 @@ Change Log
   key held longest rather than the whole-track profile's answer, and
   `MODEBALANCE` is measured against the reported key's own relative pair,
   or against its parallel when `KEYS` is the two (`Cm/C`), which had read
-  `0% major` before.
+  `0% major` before. That balance counts only the stretches the two keys
+  hold, so it always agrees with the order of `KEYS`. Where it would read
+  `0% major` or `100% major`, `MODEBALANCE` is the share spent on the
+  dominant and subdominant instead (`18% dominant (9% subdominant)`),
+  unless both of those are 0% too.
   A key and its parallel minor share a letter (`Ab/Abm`, `C#/C#m`, not
   `Ab/G#m`), and `KEY` is spelt the way `KEYS` spells it. The same in the
   DeaDBeeF plugin.
