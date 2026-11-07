@@ -40,6 +40,8 @@ namespace
 		_mm_storeu_ps(out, _mm_movelh_ps(_mm_cvtpd_ps(lo), _mm_cvtpd_ps(hi)));
 	}
 
+#if 0	// Only called when fft_scalar is double (kiss built at double width);
+	// re-enable for that build. Under pffft/float it is unused and warns.
 	//! Four products, left at double.
 	inline void window_four(const float * src, const double * w, double * out)
 	{
@@ -48,6 +50,7 @@ namespace
 		_mm_storeu_pd(out + 2, _mm_mul_pd(_mm_cvtps_pd(_mm_movehl_ps(x, x)),
 		                                  _mm_loadu_pd(w + 2)));
 	}
+#endif
 #endif
 }
 

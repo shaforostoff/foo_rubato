@@ -102,12 +102,15 @@ namespace
 		im = v.val[1];
 	}
 
+#if 0	// Only called when fft_scalar is double (kiss built at double width);
+	// re-enable for that build. Under pffft/float it is unused and warns.
 	inline void load_four(const double * p, float32x4_t & re, float32x4_t & im)
 	{
 		const float64x2x2_t a = vld2q_f64(p), b = vld2q_f64(p + 4);
 		re = vcombine_f32(vcvt_f32_f64(a.val[0]), vcvt_f32_f64(b.val[0]));
 		im = vcombine_f32(vcvt_f32_f64(a.val[1]), vcvt_f32_f64(b.val[1]));
 	}
+#endif
 
 	//! log(1 + scale * |bin|) for four bins.
 	inline float32x4_t compressed_four(float32x4_t re, float32x4_t im, float32x4_t s)
@@ -166,6 +169,8 @@ namespace
 		im = _mm_shuffle_ps(a, b, _MM_SHUFFLE(3, 1, 3, 1));
 	}
 
+#if 0	// Only called when fft_scalar is double (kiss built at double width);
+	// re-enable for that build. Under pffft/float it is unused and warns.
 	inline void load_four(const double * p, __m128 & re, __m128 & im)
 	{
 		const __m128 a = _mm_movelh_ps(_mm_cvtpd_ps(_mm_loadu_pd(p)),
@@ -175,6 +180,7 @@ namespace
 		re = _mm_shuffle_ps(a, b, _MM_SHUFFLE(2, 0, 2, 0));
 		im = _mm_shuffle_ps(a, b, _MM_SHUFFLE(3, 1, 3, 1));
 	}
+#endif
 #endif
 
 	//! log(1 + scale * |bin|) over `n` bins.
