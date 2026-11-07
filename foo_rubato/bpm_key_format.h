@@ -45,12 +45,34 @@ inline pfc::string8 bpm_format_tuning(const bpmcore::key_analysis & key)
 	return out;
 }
 
+//! The two keys KEYS names, or fewer. Returns how many.
+inline int bpm_key_pair_members(const bpmcore::key_analysis & key, const bpmcore::key_candidate * k[2])
+{
+	int n = 0;
+	for (int i = 0; i < key.time_key_count && i < 2; i++)
+		if (key.time_keys[i].root >= 0) k[n++] = &key.time_keys[i];
+	return n;
+}
+
 //! The single best key, or blank.
+//!
+//! Spelt the way KEYS spells it when KEYS names it too, so one file never
+//! carries G#m in KEY and Ab/Abm in KEYS. The cost is that the spelling of a
+//! key can depend on the key beside it: G#m alone, Abm beside Ab.
 inline pfc::string8 bpm_format_key(const bpmcore::key_analysis & key)
 {
 	pfc::string8 out;
-	if (key.ok && key.best.root >= 0)
-		out << bpmcore::key_name(key.best.root, key.best.minor);
+	if (!key.ok || key.best.root < 0) return out;
+	const bpmcore::key_candidate * k[2];
+	if (bpm_key_pair_members(key, k) == 2)
+		for (int i = 0; i < 2; i++)
+			if (k[i]->root == key.best.root && k[i]->minor == key.best.minor)
+			{
+				out << bpmcore::key_name_beside(key.best.root, key.best.minor,
+				                                k[1 - i]->root, k[1 - i]->minor);
+				return out;
+			}
+	out << bpmcore::key_name(key.best.root, key.best.minor);
 	return out;
 }
 
@@ -85,12 +107,13 @@ inline pfc::string8 bpm_format_key_pair(const bpmcore::key_analysis & key)
 	pfc::string8 out;
 	if (!key.ok) return out;
 	if (key.time_key_count <= 0) return bpm_format_key(key);
-	for (int i = 0; i < key.time_key_count && i < 2; i++)
-	{
-		if (key.time_keys[i].root < 0) continue;
-		if (!out.is_empty()) out << "/";
-		out << bpmcore::key_name(key.time_keys[i].root, key.time_keys[i].minor);
-	}
+	const bpmcore::key_candidate * k[2];
+	const int n = bpm_key_pair_members(key, k);
+	if (n == 1) out << bpmcore::key_name(k[0]->root, k[0]->minor);
+	// A parallel pair shares a letter - "Ab/Abm", not "Ab/G#m".
+	if (n == 2)
+		out << bpmcore::key_name_beside(k[0]->root, k[0]->minor, k[1]->root, k[1]->minor) << "/"
+		    << bpmcore::key_name_beside(k[1]->root, k[1]->minor, k[0]->root, k[0]->minor);
 	return out;
 }
 

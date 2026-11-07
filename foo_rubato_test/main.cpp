@@ -213,6 +213,45 @@ int main()
 		bpmcore::key_analysis short_track = k;
 		short_track.time_key_count = 0;
 		check_str(bpm_format_key_pair(short_track), "Dm", "KEYS, too short to follow");
+
+		// A parallel pair shares a letter, whichever needs fewer accidentals.
+		bpmcore::key_analysis p = k;
+		p.time_keys[0].root = 8; p.time_keys[0].minor = false;
+		p.time_keys[1].root = 8; p.time_keys[1].minor = true;
+		check_str(bpm_format_key_pair(p), "Ab/Abm", "KEYS, Ab with its parallel minor");
+		std::swap(p.time_keys[0], p.time_keys[1]);
+		check_str(bpm_format_key_pair(p), "Abm/Ab", "KEYS, Abm first");
+		p.time_keys[0].root = 1; p.time_keys[0].minor = true;
+		p.time_keys[1].root = 1; p.time_keys[1].minor = false;
+		check_str(bpm_format_key_pair(p), "C#m/C#", "KEYS, C# with its parallel minor");
+		p.time_keys[1].root = 4; p.time_keys[1].minor = false;
+		check_str(bpm_format_key_pair(p), "C#m/E", "KEYS, a relative pair keeps its spelling");
+		p.time_keys[0].root = 8; p.time_keys[0].minor = true;
+		p.time_keys[1].root = 11; p.time_keys[1].minor = false;
+		check_str(bpm_format_key_pair(p), "G#m/B", "KEYS, G#m beside its relative");
+		p.time_key_count = 1;
+		check_str(bpm_format_key_pair(p), "G#m", "KEYS, G#m alone");
+
+		// KEY is spelt as KEYS spells it, when KEYS names it.
+		bpmcore::key_analysis q = k;
+		q.best.root = 8; q.best.minor = true;                          // G#m
+		q.time_keys[0].root = 8; q.time_keys[0].minor = false;         // Ab
+		q.time_keys[1].root = 8; q.time_keys[1].minor = true;          // Abm
+		check_str(bpm_format_key(q), "Abm", "KEY, Abm when KEYS says Ab/Abm");
+		check_str(bpm_format_key_column(q), "Abm (high)", "key column follows KEY");
+		q.best.root = 1; q.best.minor = false;                         // Db
+		q.time_keys[0].root = 1; q.time_keys[0].minor = false;
+		q.time_keys[1].root = 1; q.time_keys[1].minor = true;
+		check_str(bpm_format_key(q), "C#", "KEY, C# when KEYS says C#/C#m");
+		q.time_keys[1].root = 10; q.time_keys[1].minor = true;         // Db/Bbm
+		check_str(bpm_format_key(q), "Db", "KEY, Db beside its relative");
+		q.best.root = 8; q.best.minor = true;
+		q.time_keys[0].root = 8; q.time_keys[0].minor = false;
+		q.time_keys[1].root = 3; q.time_keys[1].minor = false;         // KEYS Ab/Eb
+		check_str(bpm_format_key(q), "G#m", "KEY, G#m when KEYS does not name it");
+		q.time_keys[1].root = 8; q.time_keys[1].minor = true;
+		q.time_key_count = 1;
+		check_str(bpm_format_key(q), "G#m", "KEY, G#m when KEYS holds one key");
 	}
 	check_str(bpm_format_key_confidence(k), "high", "KEYCONFIDENCE");
 	check_str(bpm_format_mode_balance(k), "40% major, 7 switches", "MODEBALANCE");

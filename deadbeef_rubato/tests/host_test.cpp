@@ -96,9 +96,10 @@ int main()
 	check(get(flac, "KEY").empty(), "flac no plain KEY: the key goes in INITIALKEY only");
 	check(get(flac, "INITIALKEY").empty() || !get(flac, "KEYCONFIDENCE").empty(),
 	      "flac key never travels alone");
-	check(get(flac, "INITIALKEY").empty()
-	      || get(flac, "KEYS").compare(0, get(flac, "INITIALKEY").size(), get(flac, "INITIALKEY")) == 0,
-	      "flac KEYS starts with the key");
+	// Not "KEYS starts with the key": with a confident whole-track profile KEY
+	// keeps the profile's answer while KEYS says where the song sat longest.
+	check(get(flac, "INITIALKEY").empty() || !get(flac, "KEYS").empty(),
+	      "flac KEYS written beside the key");
 
 	std::printf("mp3: BEATS_PER_MINUTE %s, INITIAL_KEY %s, KeyAlgorithm %s\n",
 	            get(mp3, "BEATS_PER_MINUTE").c_str(), get(mp3, "INITIAL_KEY").c_str(),

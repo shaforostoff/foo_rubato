@@ -107,11 +107,27 @@ int main()
 	key.mode_switches = 7;
 	expect(format_key(key), "Dm", "key");
 	expect(format_key_candidates(key), "Dm:0.866 C:0.702 Gm:0.701", "key candidates");
-	expect(format_key_pair(key), "Dm/C", "key pair");
+	expect(format_key_pair(key), "Dm", "key pair, too short to follow: the key");
+	key.time_keys[0].root = 2; key.time_keys[0].minor = true;    // Dm
+	key.time_keys[1].root = 5; key.time_keys[1].minor = false;   // F
+	key.time_shares[0] = 0.62; key.time_shares[1] = 0.27;
+	key.time_key_count = 2;
+	expect(format_key_pair(key), "Dm/F", "key pair, the two keys held longest");
 	{
 		bpmcore::key_analysis one = key;
-		one.candidate_count = 1;
-		expect(format_key_pair(one), "Dm", "key pair, one candidate");
+		one.time_key_count = 1;
+		expect(format_key_pair(one), "Dm", "key pair, second key too brief");
+		bpmcore::key_analysis p = key;
+		p.time_keys[0].root = 8; p.time_keys[0].minor = false;
+		p.time_keys[1].root = 8; p.time_keys[1].minor = true;
+		expect(format_key_pair(p), "Ab/Abm", "key pair, Ab with its parallel minor");
+		p.best.root = 8; p.best.minor = true;
+		expect(format_key(p), "Abm", "key spelt as the pair spells it");
+		p.time_keys[1].root = 3; p.time_keys[1].minor = false;
+		expect(format_key(p), "G#m", "key the pair does not name");
+		p.time_keys[0].root = 1; p.time_keys[0].minor = true;
+		p.time_keys[1].root = 1; p.time_keys[1].minor = false;
+		expect(format_key_pair(p), "C#m/C#", "key pair, C# with its parallel minor");
 	}
 	expect(format_key_confidence(key), "high", "key confidence");
 	expect(format_mode_balance(key), "40% major, 7 switches", "mode balance");

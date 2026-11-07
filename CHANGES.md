@@ -12,6 +12,9 @@ Change Log
   least 15% of the windows. Below the high-confidence band, `KEY` takes the
   key held longest rather than the whole-track profile's answer, and
   `MODEBALANCE` is measured against the reported key's own relative pair.
+  A key and its parallel minor share a letter (`Ab/Abm`, `C#/C#m`, not
+  `Ab/G#m`), and `KEY` is spelt the way `KEYS` spells it. The same in the
+  DeaDBeeF plugin.
 
 * **FBPM and one key field.** `FBPM` holds the BPM to two decimals whatever
   the precision setting, taps included; Double and Halve scale it from its

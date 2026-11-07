@@ -677,6 +677,16 @@ const char * key_name(int root, bool minor)
 	return minor ? minor_names[root] : major_names[root];
 }
 
+const char * key_name_beside(int root, bool minor, int other_root, bool other_minor)
+{
+	if (root == other_root && minor != other_minor)
+	{
+		if (root == 8 && minor) return "Abm";
+		if (root == 1 && !minor) return "C#";
+	}
+	return key_name(root, minor);
+}
+
 const char * key_confidence_name(int confidence)
 {
 	switch (confidence)

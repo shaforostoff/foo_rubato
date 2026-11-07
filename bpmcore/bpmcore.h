@@ -73,6 +73,15 @@ struct key_candidate
 //! A#, D#, G# is the wrong spelling rather than a different one. Never null.
 const char * key_name(int root, bool minor);
 
+//! How a key is spelt beside another one, as in "Ab/Abm".
+//!
+//! `key_name` spells each key alone, which splits a key from its parallel
+//! minor at two tonics: Ab/G#m and Db/C#m read as unrelated keys when they
+//! share one. Beside its parallel, both get the letter that needs fewer
+//! accidentals between them - Ab/Abm (4 + 7) over G#/G#m (8 + 5), and C#/C#m
+//! (7 + 4) over Db/Dbm (5 + 8). Any other pair is spelt as `key_name` would.
+const char * key_name_beside(int root, bool minor, int other_root, bool other_minor);
+
 //! Candidates reported. The true key is the first of them 60% of the time and
 //! somewhere in the three 93% of the time, which is the whole reason there is
 //! a list rather than an answer.

@@ -118,7 +118,7 @@ const char settings_dialog_common[] =
 	"property \"Detect tuning and key\" checkbox rubato.detect_key 1;\n"
 	"property \"Write the key and KEYCONFIDENCE\" checkbox rubato.write_key 1;\n"
 	"property \"Write KEYCANDIDATES (with the key)\" checkbox rubato.write_key_candidates 1;\n"
-	"property \"Write KEYS, the first two as C/Cm (with the key)\" checkbox rubato.write_key_pair 1;\n"
+	"property \"Write KEYS, the two keys held longest, as Cm/C (with the key)\" checkbox rubato.write_key_pair 1;\n"
 	"property \"Write TUNING\" checkbox rubato.write_tuning 1;\n"
 	"property \"Write RETUNE\" checkbox rubato.write_retune 1;\n"
 	"property \"Log the details of each analysis\" checkbox rubato.diagnostics 0;\n";

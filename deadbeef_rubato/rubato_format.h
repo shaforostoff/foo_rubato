@@ -114,10 +114,27 @@ inline std::string format_tuning(const bpmcore::key_analysis & key)
 	return std::string();
 }
 
+//! The two keys KEYS names, or fewer. Returns how many.
+inline int key_pair_members(const bpmcore::key_analysis & key, const bpmcore::key_candidate * k[2])
+{
+	int n = 0;
+	for (int i = 0; i < key.time_key_count && i < 2; i++)
+		if (key.time_keys[i].root >= 0) k[n++] = &key.time_keys[i];
+	return n;
+}
+
+//! The single best key, spelt the way KEYS spells it when KEYS names it too -
+//! Abm beside Ab, G#m otherwise - so the two fields of one file agree.
 inline std::string format_key(const bpmcore::key_analysis & key)
 {
-	if (key.ok && key.best.root >= 0) return bpmcore::key_name(key.best.root, key.best.minor);
-	return std::string();
+	if (!key.ok || key.best.root < 0) return std::string();
+	const bpmcore::key_candidate * k[2];
+	if (key_pair_members(key, k) == 2)
+		for (int i = 0; i < 2; i++)
+			if (k[i]->root == key.best.root && k[i]->minor == key.best.minor)
+				return bpmcore::key_name_beside(key.best.root, key.best.minor,
+				                                k[1 - i]->root, k[1 - i]->minor);
+	return bpmcore::key_name(key.best.root, key.best.minor);
 }
 
 //! "Dm:0.866 C:0.702 Gm:0.701"
@@ -136,18 +153,27 @@ inline std::string format_key_candidates(const bpmcore::key_analysis & key)
 	return out;
 }
 
-//! The first two candidates, slash-separated - "C/Cm" - for a player that
-//! shows one short field. The first alone when it is the only candidate.
+//! The two keys the song spends longest in, slash-separated, longest first -
+//! "Cm/C" - for a player that shows one short field.
+//!
+//! One key when the second holds too little of the track to count, and the
+//! reported key alone when the track was too short to follow over time. The
+//! first is not always KEY: with a confident whole-track profile KEY keeps the
+//! profile's answer, while this says where the song actually sat.
 inline std::string format_key_pair(const bpmcore::key_analysis & key)
 {
 	std::string out;
 	if (!key.ok) return out;
-	int taken = 0;
-	for (int i = 0; i < key.candidate_count && taken < 2; i++)
+	if (key.time_key_count <= 0) return format_key(key);
+	const bpmcore::key_candidate * k[2];
+	const int n = key_pair_members(key, k);
+	if (n == 1) out = bpmcore::key_name(k[0]->root, k[0]->minor);
+	// A parallel pair shares a letter - "Ab/Abm", not "Ab/G#m".
+	if (n == 2)
 	{
-		if (key.candidates[i].root < 0) continue;
-		if (taken++ > 0) out += '/';
-		out += bpmcore::key_name(key.candidates[i].root, key.candidates[i].minor);
+		out = bpmcore::key_name_beside(k[0]->root, k[0]->minor, k[1]->root, k[1]->minor);
+		out += '/';
+		out += bpmcore::key_name_beside(k[1]->root, k[1]->minor, k[0]->root, k[0]->minor);
 	}
 	return out;
 }
